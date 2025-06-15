@@ -69,6 +69,22 @@ document.addEventListener("keydown", function(event) {
             event.preventDefault(); // Prevent page scrolling
             keys.space = true;
             break;
+
+        case '1':
+            lights[0].enabled = !lights[0].enabled;
+            break;
+        case '2':
+            lights[1].enabled = !lights[1].enabled;
+            break;
+        case '3':
+            lights[2].enabled = !lights[2].enabled;
+            break;
+        case '4':
+            lights[3].enabled = !lights[3].enabled;
+            break;
+        case 'l':
+            lightMovement = !lightMovement;
+            break;
     }
 });
 

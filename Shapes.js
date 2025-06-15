@@ -7,10 +7,10 @@ class Vertex {
 }
 
 class Cube {
-    constructor({x, y, z, h = 100, w = 100, d = 100, name = "cube", color = { r: 100, g: 150, b: 200 }, subdivisions = 2}) {
+    constructor({x, y, z, h = 100, w = 100, d = 100, name = "cube", color = { r: 100, g: 150, b: 200 }, subdivisions = 1}) {
         this.name = name;
         this.color = color;
-        this.subdivisions = subdivisions;
+        this.subdivisions = Math.max(1, Math.min(subdivisions, 8)); // Limit subdivisions
 
         this.x = x;
         this.y = y;
@@ -142,11 +142,11 @@ class Cube {
 }
 
 class Plane {
-    constructor({x, y, z, width = 1000, height = 1000, name = "plane", color = { r: 100, g: 150, b: 200 }, subdivisions = 10, orientation = "horizontal"}) {
+    constructor({x, y, z, width = 1000, height = 1000, name = "plane", color = { r: 100, g: 150, b: 200 }, subdivisions = 2, orientation = "horizontal"}) {
         this.name = name;
         this.color = color;
-        this.subdivisions = subdivisions;
-        this.orientation = orientation; // "horizontal", "vertical-xz", "vertical-yz"
+        this.subdivisions = Math.max(1, Math.min(subdivisions, 4)); // Limit subdivisions for performance
+        this.orientation = orientation;
 
         this.x = x;
         this.y = y;
@@ -233,7 +233,7 @@ class Sphere {
         this.color = color;
         
         this.radius = radius;
-        this.segments = segments;
+        this.segments = segments // Limit segments for performance
 
         this.x = x;
         this.y = y;
@@ -244,6 +244,9 @@ class Sphere {
     }
 
     setUp() {
+        this.Vertices = [];
+        this.Triangles = [];
+        
         for (let i = 0; i <= this.segments; i++) {
             const theta = i * Math.PI / this.segments;
 
@@ -275,14 +278,14 @@ class Sphere {
 class Text {
     constructor({
         text = "Sample Text",
-        cube = null, // Reference to the cube object
-        face = "front", // "front", "back", "left", "right", "top", "bottom"
+        cube = null,
+        face = "front",
         fontSize = 20,
         fontFamily = "Arial",
         color = { r: 255, g: 255, b: 255 },
-        offsetX = 0, // Offset from center of face
+        offsetX = 0,
         offsetY = 0,
-        alignment = "center" // "left", "center", "right"
+        alignment = "center"
     }) {
         this.text = text;
         this.cube = cube;
@@ -296,7 +299,6 @@ class Text {
         this.isVisible = true;
     }
 
-    // Get the center point and normal of the specified face
     getFaceData() {
         if (!this.cube) return null;
 
@@ -307,8 +309,8 @@ class Text {
             case "front":
                 center = { x: x, y: y, z: z - d };
                 normal = { x: 0, y: 0, z: -1 };
-                uVector = { x: 1, y: 0, z: 0 }; // Right direction
-                vVector = { x: 0, y: 1, z: 0 }; // Up direction
+                uVector = { x: 1, y: 0, z: 0 };
+                vVector = { x: 0, y: 1, z: 0 };
                 break;
             case "back":
                 center = { x: x, y: y, z: z + d };
@@ -347,31 +349,26 @@ class Text {
         return { center, normal, uVector, vVector };
     }
 
-    // Check if the text face is visible to the camera
     isFaceVisible(camera) {
         const faceData = this.getFaceData();
         if (!faceData) return false;
 
         const { center, normal } = faceData;
         
-        // Vector from face center to camera
         const toCamera = vectorSubtract(
             { x: camera.x, y: camera.y, z: camera.z },
             center
         );
         
-        // If dot product is positive, face is visible
         return vectorDot(vectorNormalize(toCamera), normal) > 0;
     }
 
-    // Get the 3D position where text should be rendered
     getTextPosition() {
         const faceData = this.getFaceData();
         if (!faceData) return null;
 
         const { center, uVector, vVector } = faceData;
 
-        // Apply offsets
         return {
             x: center.x + (uVector.x * this.offsetX) + (vVector.x * this.offsetY),
             y: center.y + (uVector.y * this.offsetX) + (vVector.y * this.offsetY),
@@ -380,15 +377,112 @@ class Text {
     }
 }
 
+class TiledFloor {
+    constructor(tileSize = 800, gridSize = 15) { // Larger tiles, less detail
+        this.tileSize = tileSize;
+        this.gridSize = gridSize;
+        this.tiles = new Map();
+        this.floorY = 120;
+        this.lastUpdateX = null;
+        this.lastUpdateZ = null;
+    }
+    
+    updateTiles(cameraX, cameraZ) {
+        // Only update if camera moved significantly
+        if (this.lastUpdateX !== null && this.lastUpdateZ !== null) {
+            const deltaX = Math.abs(cameraX - this.lastUpdateX);
+            const deltaZ = Math.abs(cameraZ - this.lastUpdateZ);
+            if (deltaX < this.tileSize / 2 && deltaZ < this.tileSize / 2) {
+                return; // Don't update if camera hasn't moved much
+            }
+        }
+        
+        const centerTileX = Math.floor(cameraX / this.tileSize);
+        const centerTileZ = Math.floor(cameraZ / this.tileSize);
+        
+        const renderDistance = 2; // Reduced render distance
+        
+        // Clear old tiles that are too far
+        for (let [key, tile] of this.tiles) {
+            const [tileX, tileZ] = key.split(',').map(Number);
+            if (Math.abs(tileX - centerTileX) > renderDistance + 1 || 
+                Math.abs(tileZ - centerTileZ) > renderDistance + 1) {
+                this.tiles.delete(key);
+            }
+        }
+        
+        // Add new tiles that are needed
+        for (let x = centerTileX - renderDistance; x <= centerTileX + renderDistance; x++) {
+            for (let z = centerTileZ - renderDistance; z <= centerTileZ + renderDistance; z++) {
+                const key = `${x},${z}`;
+                if (!this.tiles.has(key)) {
+                    this.tiles.set(key, this.createTile(x, z));
+                }
+            }
+        }
+        
+        this.lastUpdateX = cameraX;
+        this.lastUpdateZ = cameraZ;
+    }
+    
+    createTile(tileX, tileZ) {
+        const worldX = tileX * this.tileSize;
+        const worldZ = tileZ * this.tileSize;
+        
+        const tile = new Plane({
+            x: worldX, 
+            y: this.floorY, 
+            z: worldZ,
+            width: this.tileSize,
+            height: this.tileSize,
+            subdivisions: 2, // Reduced subdivisions for better performance
+            orientation: "horizontal"
+        });
+        
+        // Set a subtle floor color variation
+        const variation = Math.sin(tileX * 0.1) * Math.cos(tileZ * 0.1) * 20;
+        tile.color = { 
+            r: 80 + variation, 
+            g: 120 + variation, 
+            b: 160 + variation 
+        };
+        
+        return tile;
+    }
+    
+    getTiles() {
+        return Array.from(this.tiles.values());
+    }
+}
+
+// Updated Light class with additional properties
 class Light {
-    constructor({ x, y, z, color = { r: 255, g: 255, b: 255 }, intensity = 1 }) {
+    constructor({x = 0, y = 0, z = 0, color = {r: 255, g: 255, b: 255}, intensity = 1.0, radius = 100, type = 'point'}) {
         this.x = x;
         this.y = y;
         this.z = z;
         this.color = color;
         this.intensity = intensity;
+        this.radius = radius; // For area lighting/soft shadows
+        this.type = type; // 'point', 'directional', 'spot'
+        this.enabled = true;
+    }
+    
+    // For directional lights
+    setDirection(direction) {
+        this.direction = vectorNormalize(direction);
+        this.type = 'directional';
+    }
+    
+    // For spot lights
+    setSpotlight(direction, angle, falloff = 1.0) {
+        this.direction = vectorNormalize(direction);
+        this.spotAngle = angle;
+        this.spotFalloff = falloff;
+        this.type = 'spot';
     }
 }
+
 
 class Camera {
     constructor({ x, y, z }) {

@@ -1,4 +1,5 @@
-function fillTriangle(v1, v2, v3, normal, worldV1, worldV2, worldV3, light, materialColor = { r: 100, g: 150, b: 200 }, currentShape = null, allShapes = []) {
+// Updated fillTriangle function for multiple lights
+function fillTriangleMultiLight(v1, v2, v3, normal, worldV1, worldV2, worldV3, lights, materialColor = { r: 100, g: 150, b: 200 }, currentShape = null, allShapes = []) {
     if (!v1 || !v2 || !v3 || !worldV1 || !worldV2 || !worldV3) return;
     
     context.save();
@@ -9,39 +10,48 @@ function fillTriangle(v1, v2, v3, normal, worldV1, worldV2, worldV3, light, mate
         z: (worldV1.z + worldV2.z + worldV3.z) / 3
     };
 
-    const lightDir = vectorNormalize(vectorSubtract(light, centerWorld));
+    // Initialize lighting components
+    let totalDiffuse = { r: 0, g: 0, b: 0 };
+    const ambient = 0.15;
     
-    let intensity = Math.max(0, vectorDot(normal, lightDir));
-    
-    let shadowIntensity = 1.0;
-    if (allShapes.length > 1) {
-        shadowIntensity = calculateShadowIntensity(centerWorld, light, allShapes, currentShape);
+    // Process each light source
+    for (let light of lights) {
+        if (!light.enabled) continue;
+        
+        let lightContribution = calculateLightContribution(
+            centerWorld, 
+            normal, 
+            light, 
+            allShapes, 
+            currentShape
+        );
+        
+        // Accumulate light contributions
+        totalDiffuse.r += lightContribution.r;
+        totalDiffuse.g += lightContribution.g;
+        totalDiffuse.b += lightContribution.b;
     }
     
-    const ambient = 0.15;
-    intensity = Math.min(1, intensity + ambient);
-    
-    const directLight = Math.max(0, intensity - ambient);
-    intensity = ambient + (directLight * shadowIntensity);
-
-    const colorInfluence = 0.3;
-    
-    const lightColor = {
-        r: (light.color.r / 255) * colorInfluence + (1 - colorInfluence),
-        g: (light.color.g / 255) * colorInfluence + (1 - colorInfluence),
-        b: (light.color.b / 255) * colorInfluence + (1 - colorInfluence)
+    // Apply ambient lighting
+    const finalIntensity = {
+        r: Math.min(1, ambient + totalDiffuse.r),
+        g: Math.min(1, ambient + totalDiffuse.g),
+        b: Math.min(1, ambient + totalDiffuse.b)
     };
 
+    // Calculate final color
     const finalColor = {
-        r: Math.floor(materialColor.r * intensity * lightColor.r * light.intensity),
-        g: Math.floor(materialColor.g * intensity * lightColor.g * light.intensity),
-        b: Math.floor(materialColor.b * intensity * lightColor.b * light.intensity)
+        r: Math.floor(materialColor.r * finalIntensity.r),
+        g: Math.floor(materialColor.g * finalIntensity.g),
+        b: Math.floor(materialColor.b * finalIntensity.b)
     };
 
+    // Clamp colors
     finalColor.r = Math.max(0, Math.min(255, finalColor.r));
     finalColor.g = Math.max(0, Math.min(255, finalColor.g));
     finalColor.b = Math.max(0, Math.min(255, finalColor.b));
 
+    // Render triangle
     context.beginPath();
     context.moveTo(v1.x, v1.y);
     context.lineTo(v2.x, v2.y);
@@ -53,6 +63,199 @@ function fillTriangle(v1, v2, v3, normal, worldV1, worldV2, worldV3, light, mate
     context.fill();
 
     context.restore();
+}
+
+// Calculate lighting contribution from a single light
+function calculateLightContribution(worldPoint, normal, light, allShapes, excludeShape) {
+    let lightDir, distance, attenuation = 1.0;
+    
+    // Calculate light direction and attenuation based on light type
+    switch (light.type) {
+        case 'directional':
+            lightDir = vectorNormalize({
+                x: -light.direction.x,
+                y: -light.direction.y,
+                z: -light.direction.z
+            });
+            distance = Infinity; // No distance attenuation for directional lights
+            break;
+            
+        case 'spot':
+            const toLightVec = vectorSubtract(light, worldPoint);
+            distance = Math.sqrt(toLightVec.x * toLightVec.x + toLightVec.y * toLightVec.y + toLightVec.z * toLightVec.z);
+            lightDir = vectorNormalize(toLightVec);
+            
+            // Calculate spot light cone attenuation
+            const spotDot = vectorDot(lightDir, vectorNormalize({
+                x: -light.direction.x,
+                y: -light.direction.y,
+                z: -light.direction.z
+            }));
+            const spotAngleCos = Math.cos(light.spotAngle);
+            
+            if (spotDot < spotAngleCos) {
+                return { r: 0, g: 0, b: 0 }; // Outside spot cone
+            }
+            
+            const spotAttenuation = Math.pow(spotDot, light.spotFalloff);
+            attenuation *= spotAttenuation;
+            break;
+            
+        case 'point':
+        default:
+            const toLightPoint = vectorSubtract(light, worldPoint);
+            distance = Math.sqrt(toLightPoint.x * toLightPoint.x + toLightPoint.y * toLightPoint.y + toLightPoint.z * toLightPoint.z);
+            lightDir = vectorNormalize(toLightPoint);
+            break;
+    }
+    
+    // Calculate distance attenuation (inverse square law with minimum)
+    if (distance !== Infinity) {
+        attenuation *= Math.max(0.01, 1.0 / (1.0 + 0.001 * distance + 0.0001 * distance * distance));
+    }
+    
+    // Calculate diffuse lighting (Lambert)
+    let intensity = Math.max(0, vectorDot(normal, lightDir));
+    
+    // Calculate shadows
+    let shadowIntensity = 1.0;
+    if (allShapes.length > 1) {
+        shadowIntensity = calculateShadowIntensityForLight(worldPoint, light, allShapes, excludeShape, normal);
+    }
+    
+    // Apply attenuation and shadow
+    intensity *= attenuation * shadowIntensity * light.intensity;
+    
+    // Apply light color
+    const colorInfluence = 0.3;
+    const lightColor = {
+        r: (light.color.r / 255) * colorInfluence + (1 - colorInfluence),
+        g: (light.color.g / 255) * colorInfluence + (1 - colorInfluence),
+        b: (light.color.b / 255) * colorInfluence + (1 - colorInfluence)
+    };
+    
+    return {
+        r: intensity * lightColor.r,
+        g: intensity * lightColor.g,
+        b: intensity * lightColor.b
+    };
+}
+
+// Updated shadow calculation for individual lights
+function calculateShadowIntensityForLight(worldPoint, light, allShapes, excludeShape, surfaceNormal) {
+    const shadowSamples = 4;
+    let shadowSum = 0;
+    
+    // For directional lights, use parallel rays
+    if (light.type === 'directional') {
+        const rayDirection = vectorNormalize({
+            x: -light.direction.x,
+            y: -light.direction.y,
+            z: -light.direction.z
+        });
+        
+        // Offset along surface normal
+        const rayOrigin = {
+            x: worldPoint.x + surfaceNormal.x * 0.1,
+            y: worldPoint.y + surfaceNormal.y * 0.1,
+            z: worldPoint.z + surfaceNormal.z * 0.1
+        };
+        
+        if (isPointInShadowDirectional(rayOrigin, rayDirection, allShapes, excludeShape)) {
+            return 0.3; // Heavy shadow for directional light
+        }
+        return 1.0;
+    }
+    
+    // For point and spot lights, use area sampling
+    const lightRadius = light.radius || 50;
+    
+    for (let i = 0; i < shadowSamples; i++) {
+        const angle1 = (i / shadowSamples) * Math.PI * 2;
+        const angle2 = Math.random() * Math.PI * 2;
+        const radius = Math.random() * lightRadius;
+        
+        const offsetLight = {
+            x: light.x + Math.cos(angle1) * radius,
+            y: light.y + Math.sin(angle1) * Math.cos(angle2) * radius,
+            z: light.z + Math.sin(angle1) * Math.sin(angle2) * radius,
+            color: light.color,
+            intensity: light.intensity,
+            type: light.type
+        };
+        
+        if (isPointInShadowWithNormal(worldPoint, surfaceNormal, offsetLight, allShapes, excludeShape)) {
+            shadowSum += 1;
+        }
+    }
+    
+    return 1.0 - (shadowSum / shadowSamples);
+}
+
+// Shadow calculation for directional lights
+function isPointInShadowDirectional(rayOrigin, rayDirection, allShapes, excludeShape) {
+    for (let shape of allShapes) {
+        if (shape === excludeShape) continue;
+        
+        for (let triangleIndices of shape.Triangles) {
+            if (!triangleIndices || triangleIndices.length < 3) continue;
+            
+            const v0 = shape.Vertices[triangleIndices[0]];
+            const v1 = shape.Vertices[triangleIndices[1]];
+            const v2 = shape.Vertices[triangleIndices[2]];
+            
+            if (!v0 || !v1 || !v2) continue;
+            
+            const intersection = rayTriangleIntersection(rayOrigin, rayDirection, v0, v1, v2);
+            
+            // For directional lights, any intersection means shadow
+            if (intersection && intersection.distance > 0.1) {
+                return true;
+            }
+        }
+    }
+    
+    return false;
+}
+
+// Function to render multiple light sources
+function renderLights(lights, camera) {
+    for (let i = 0; i < lights.length; i++) {
+        const light = lights[i];
+        if (!light.enabled) continue;
+        
+        // Only render point and spot lights (directional lights don't have a position to render)
+        if (light.type === 'directional') continue;
+        
+        const lightTransformed = {
+            x: light.x - camera.x,
+            y: light.y - camera.y,
+            z: light.z - camera.z
+        };
+        
+        let lightRotated = MatrixTimesVector(rotYMatrix(-camera.rotationX), lightTransformed);
+        lightRotated = MatrixTimesVector(rotXMatrix(camera.rotationY), lightRotated);
+        
+        const lightProjected = addPerspective(lightRotated, camera.fov);
+        
+        if (lightProjected && lightProjected.z > 0) {
+            context.fillStyle = `rgb(${light.color.r}, ${light.color.g}, ${light.color.b})`;
+            context.beginPath();
+            
+            // Different sizes for different light types
+            const size = light.type === 'spot' ? 12 : 8;
+            context.arc(lightProjected.x, lightProjected.y, size, 0, Math.PI * 2);
+            context.fill();
+            
+            // Add light index label
+            renderUIText(lightProjected.x + 15, lightProjected.y - 5, `L${i}`, {
+                fontSize: 12,
+                color: `rgb(${light.color.r}, ${light.color.g}, ${light.color.b})`,
+                backgroundColor: 'rgba(0,0,0,0.7)',
+                padding: 2
+            });
+        }
+    }
 }
 
 function renderText(textObj, camera, light, allShapes) {
