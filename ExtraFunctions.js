@@ -391,37 +391,3 @@ function isTriangleFacingCamera(p1, p2, p3) {
     
     return crossZ > 0;
 }
-
-function CollisionDetection(player, collidableObjects) {
-    const playerRadius = 20; // Collision radius around the camera
-    
-    for (const shape of collidableObjects) {
-        if (shape.name && shape.name.includes("sphere")) {
-            // Sphere collision detection
-            const distance = Math.sqrt(
-                Math.pow(player.x - shape.x, 2) + 
-                Math.pow(player.y - shape.y, 2) + 
-                Math.pow(player.z - shape.z, 2)
-            );
-            
-            if (distance <= shape.radius + playerRadius) {
-                return false; // Collision detected
-            }
-        } else {
-            // Cube/Box collision detection using AABB (Axis-Aligned Bounding Box)
-            const halfWidth = shape.w || 50;   // Use shape dimensions or default
-            const halfHeight = shape.h || 50;
-            const halfDepth = shape.d || 50;
-            
-            // Check if player is within the expanded bounding box
-            const isInXRange = Math.abs(player.x - shape.x) <= halfWidth + playerRadius;
-            const isInYRange = Math.abs(player.y - shape.y) <= halfHeight + playerRadius;
-            const isInZRange = Math.abs(player.z - shape.z) <= halfDepth + playerRadius;
-            
-            if (isInXRange && isInYRange && isInZRange) {
-                return false; // Collision detected
-            }
-        }
-    }
-    return true; // No collision
-}
