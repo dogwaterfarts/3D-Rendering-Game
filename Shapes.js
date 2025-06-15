@@ -141,6 +141,92 @@ class Cube {
     }
 }
 
+class Plane {
+    constructor({x, y, z, width = 1000, height = 1000, name = "plane", color = { r: 100, g: 150, b: 200 }, subdivisions = 10, orientation = "horizontal"}) {
+        this.name = name;
+        this.color = color;
+        this.subdivisions = subdivisions;
+        this.orientation = orientation; // "horizontal", "vertical-xz", "vertical-yz"
+
+        this.x = x;
+        this.y = y;
+        this.z = z;
+
+        this.width = width;
+        this.height = height;
+
+        // For collision detection
+        this.w = width / 2;
+        this.h = 1; // Very thin for collision
+        this.d = height / 2;
+
+        this.Vertices = [];
+        this.Triangles = [];
+    }
+
+    setUp() {
+        this.Vertices = [];
+        this.Triangles = [];
+        
+        const x = this.x;
+        const y = this.y;
+        const z = this.z;
+        const w = this.width / 2;
+        const h = this.height / 2;
+        const sub = this.subdivisions;
+
+        let vertexIndex = 0;
+
+        // Generate vertices based on orientation
+        for (let i = 0; i <= sub; i++) {
+            for (let j = 0; j <= sub; j++) {
+                let px, py, pz;
+                
+                if (this.orientation === "horizontal") {
+                    // Horizontal plane (floor/ceiling)
+                    px = -w + x + (2 * w * j) / sub;
+                    py = y;
+                    pz = -h + z + (2 * h * i) / sub;
+                } else if (this.orientation === "vertical-xz") {
+                    // Vertical plane facing Y direction
+                    px = -w + x + (2 * w * j) / sub;
+                    py = -h + y + (2 * h * i) / sub;
+                    pz = z;
+                } else if (this.orientation === "vertical-yz") {
+                    // Vertical plane facing X direction
+                    px = x;
+                    py = -h + y + (2 * h * i) / sub;
+                    pz = -w + z + (2 * w * j) / sub;
+                }
+                
+                this.Vertices.push(new Vertex(px, py, pz));
+                vertexIndex++;
+            }
+        }
+
+        // Generate triangles
+        for (let i = 0; i < sub; i++) {
+            for (let j = 0; j < sub; j++) {
+                const topLeft = i * (sub + 1) + j;
+                const topRight = topLeft + 1;
+                const bottomLeft = topLeft + (sub + 1);
+                const bottomRight = bottomLeft + 1;
+
+                // Ensure proper winding order based on orientation
+                if (this.orientation === "horizontal") {
+                    // For horizontal planes, use counter-clockwise for upward-facing normal
+                    this.Triangles.push([topLeft, bottomLeft, topRight]);
+                    this.Triangles.push([topRight, bottomLeft, bottomRight]);
+                } else {
+                    // For vertical planes
+                    this.Triangles.push([topLeft, topRight, bottomLeft]);
+                    this.Triangles.push([topRight, bottomRight, bottomLeft]);
+                }
+            }
+        }
+    }
+}
+
 class Sphere {
     constructor({x, y, z, radius, segments, name = "sphere", color = { r: 100, g: 150, b: 200 }}) {
         this.name = name;

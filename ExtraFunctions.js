@@ -381,13 +381,47 @@ function renderUIText(x, y, text, options = {}) {
     context.restore();
 }
 
-function isTriangleFacingCamera(p1, p2, p3) {
+function isTriangleFacingCamera(p1, p2, p3, worldVertices, cameraPos) {
     if (!p1 || !p2 || !p3) return false;
     
+    // Calculate screen-space winding order for basic culling
     const v1 = { x: p2.x - p1.x, y: p2.y - p1.y };
     const v2 = { x: p3.x - p1.x, y: p3.y - p1.y };
-    
     const crossZ = v1.x * v2.y - v1.y * v2.x;
     
-    return crossZ > 0;
+    // If triangle is very close to camera, be more lenient with culling
+    const avgZ = (p1.z + p2.z + p3.z) / 3;
+    if (avgZ < 50) {
+        return crossZ > -0.1; // More lenient threshold for close triangles
+    }
+    
+    // For far triangles, use normal culling
+    if (avgZ > 1000) {
+        return crossZ > 0;
+    }
+    
+    // For medium distance, use moderate culling
+    return crossZ > -0.05;
+}
+
+// Improved triangle visibility check
+function isTriangleVisible(p1, p2, p3) {
+    if (!p1 || !p2 || !p3) return false;
+    
+    // Check if all vertices are behind camera
+    if (p1.z <= 0 && p2.z <= 0 && p3.z <= 0) return false;
+    
+    // Check if triangle is completely outside screen bounds
+    const minX = Math.min(p1.x, p2.x, p3.x);
+    const maxX = Math.max(p1.x, p2.x, p3.x);
+    const minY = Math.min(p1.y, p2.y, p3.y);
+    const maxY = Math.max(p1.y, p2.y, p3.y);
+    
+    const margin = 1000; // Allow some margin for partially visible triangles
+    if (maxX < -margin || minX > canvasWidth + margin || 
+        maxY < -margin || minY > canvasHeight + margin) {
+        return false;
+    }
+    
+    return true;
 }

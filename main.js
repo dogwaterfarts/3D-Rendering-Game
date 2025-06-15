@@ -13,7 +13,15 @@ const centerY = canvasHeight / 2;
 const Shapes = [];
 
 Shapes[0] = new Cube({x: 200, y: 100, z: 300, w: 200, h: 200, d: 200, name: "back cube", subdivisions: 2});
-Shapes[1] = new Cube({x: 0, y: 120, z: 0, w: 5000, h: 2, d: 5000, name: "Floor", subdivisions: 20});
+// Replace the floor cube with a proper plane
+// Shapes[1] = new Plane({
+//     x: 0, y: 120, z: 0, 
+//     width: 2000, height: 2000, 
+//     name: "Floor", 
+//     subdivisions: 12, 
+//     orientation: "horizontal"
+// });
+Shapes[1] = new Cube({x: 0, y: 120, z: 0, w: 3000, h: 0, d: 3000, name: "floor", subdivisions: 15});
 Shapes[2] = new Sphere({x: 0, y: 0, z: 100, radius: 150, segments: 15, name: "front sphere"});
 
 Shapes[0].color = { r: 255, g: 100, b: 100 };
@@ -47,11 +55,11 @@ const engine = () => {
 
     time += 0.02;
     
-    if (lightMovement) {
-        light.x = centerX + Math.cos(time) * 400;
-        light.y = centerY + Math.sin(time * 1.3) * 200;
-        light.z = Math.sin(time * 0.7) * 300 - 200;
-    }
+    // if (lightMovement) {
+    //     light.x = Math.cos(time) * 400;
+    //     light.y = Math.sin(time * 1.3) * 200 - 200;
+    //     light.z = Math.sin(time * 0.7) * 300 + 200;
+    // }
 
     let shapesWithDepth = [];
 
@@ -71,7 +79,7 @@ const engine = () => {
             let rotated = MatrixTimesVector(rotYMatrix(-camera.rotationX), translated);
             rotated = MatrixTimesVector(rotXMatrix(camera.rotationY), rotated);
 
-            let projected2D = addPerspective(rotated, camera.fov, camera.camZ);
+            let projected2D = addPerspective(rotated, camera.fov);
 
             if (!projected2D) {
                 projected.push(null);
@@ -103,15 +111,20 @@ const engine = () => {
 
             if (!p1 || !p2 || !p3 || !w1 || !w2 || !w3) continue;
 
+            // Improved visibility check
+            if (!isTriangleVisible(p1, p2, p3)) continue;
+
             const edge1 = vectorSubtract(w2, w1);
             const edge2 = vectorSubtract(w3, w1);
             const normal = vectorNormalize(vectorCross(edge1, edge2));
 
             const avgTriangleDepth = (p1.z + p2.z + p3.z) / 3;
 
-            if (avgTriangleDepth >= 2500) continue;
+            // Increased max depth for better far plane visibility
+            if (avgTriangleDepth >= 5000) continue;
 
-            if (isTriangleFacingCamera(p1, p2, p3)) {
+            // Improved backface culling
+            if (isTriangleFacingCamera(p1, p2, p3, [w1, w2, w3], camera)) {
                 trianglesWithDepth.push({
                     vertices: [p1, p2, p3],
                     worldVertices: [w1, w2, w3],
@@ -181,7 +194,7 @@ const engine = () => {
     });
 
     // Render UI text
-    renderUIText(10, 10, "3D Text Rendering Demo", {
+    renderUIText(10, 10, "3D Plane Rendering Demo", {
         fontSize: 20,
         color: '#ffffff',
         backgroundColor: 'rgba(0,0,0,0.8)',
