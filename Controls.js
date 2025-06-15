@@ -8,9 +8,7 @@ const keys = {
     w: false,
     a: false,
     s: false,
-    d: false,
-    q: false,
-    e: false
+    d: false
 };
 
 // Velocity and movement parameters
@@ -51,15 +49,6 @@ document.addEventListener("keydown", function(event) {
         case "a":
             keys.a = true;
             break;
-        case "q":
-            keys.q = true;
-            break;
-        case "e":
-            keys.e = true;
-            break;
-        case "l":
-            lightMovement = !lightMovement;
-            break;
     }
 });
 
@@ -77,12 +66,6 @@ document.addEventListener("keyup", function(event) {
         case "a":
             keys.a = false;
             break;
-        case "q":
-            keys.q = false;
-            break;
-        case "e":
-            keys.e = false;
-            break;
     }
 });
 
@@ -94,12 +77,12 @@ function updateMovement() {
     // Forward/backward movement
     if (keys.w) {
         desiredVelocity.x += Math.sin(camera.rotationX) * Math.cos(camera.rotationY);
-        desiredVelocity.y += Math.sin(camera.rotationY);
+        // desiredVelocity.y += Math.sin(camera.rotationY);
         desiredVelocity.z += Math.cos(camera.rotationX) * Math.cos(camera.rotationY);
     }
     if (keys.s) {
         desiredVelocity.x -= Math.sin(camera.rotationX) * Math.cos(camera.rotationY);
-        desiredVelocity.y -= Math.sin(camera.rotationY);
+        // desiredVelocity.y -= Math.sin(camera.rotationY);
         desiredVelocity.z -= Math.cos(camera.rotationX) * Math.cos(camera.rotationY);
     }
     
@@ -113,42 +96,34 @@ function updateMovement() {
         desiredVelocity.z += Math.sin(camera.rotationX);
     }
     
-    // Up/down movement
-    if (keys.q) {
-        desiredVelocity.y -= 1;
-    }
-    if (keys.e) {
-        desiredVelocity.y += 1;
-    }
-    
     // Normalize diagonal movement
     const magnitude = Math.sqrt(
         desiredVelocity.x * desiredVelocity.x + 
-        desiredVelocity.y * desiredVelocity.y + 
+        // desiredVelocity.y * desiredVelocity.y + 
         desiredVelocity.z * desiredVelocity.z
     );
     
     if (magnitude > 0) {
         desiredVelocity.x = (desiredVelocity.x / magnitude) * maxSpeed;
-        desiredVelocity.y = (desiredVelocity.y / magnitude) * maxSpeed;
+        // desiredVelocity.y = (desiredVelocity.y / magnitude) * maxSpeed;
         desiredVelocity.z = (desiredVelocity.z / magnitude) * maxSpeed;
     }
     
     // Smooth acceleration towards desired velocity
     velocity.x += (desiredVelocity.x - velocity.x) * acceleration;
-    velocity.y += (desiredVelocity.y - velocity.y) * acceleration;
+    // velocity.y += (desiredVelocity.y - velocity.y) * acceleration;
     velocity.z += (desiredVelocity.z - velocity.z) * acceleration;
     
     // Apply friction when not moving
     if (magnitude === 0) {
         velocity.x *= friction;
-        velocity.y *= friction;
+        // velocity.y *= friction;
         velocity.z *= friction;
     }
     
     // Store original position for collision detection
     const originalX = camera.x;
-    const originalY = camera.y;
+    // const originalY = camera.y;
     const originalZ = camera.z;
     
     // Try to move in each axis separately for better wall sliding
@@ -160,11 +135,11 @@ function updateMovement() {
     }
     
     // Y-axis movement
-    camera.y += velocity.y;
-    if (!CollisionDetection(camera, Shapes)) {
-        camera.y = originalY;
-        velocity.y *= -0.1;
-    }
+    // camera.y += velocity.y;
+    // if (!CollisionDetection(camera, Shapes)) {
+    //     camera.y = originalY;
+    //     velocity.y *= -0.1;
+    // }
     
     // Z-axis movement
     camera.z += velocity.z;
@@ -175,7 +150,7 @@ function updateMovement() {
     
     // Stop very small movements to prevent jitter
     if (Math.abs(velocity.x) < 0.01) velocity.x = 0;
-    if (Math.abs(velocity.y) < 0.01) velocity.y = 0;
+    // if (Math.abs(velocity.y) < 0.01) velocity.y = 0;
     if (Math.abs(velocity.z) < 0.01) velocity.z = 0;
 }
 
