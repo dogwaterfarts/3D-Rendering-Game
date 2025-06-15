@@ -14,14 +14,14 @@ const Shapes = [];
 
 Shapes[0] = new Cube({x: 200, y: 100, z: 300, w: 200, h: 200, d: 200, name: "back cube", subdivisions: 2});
 // Replace the floor cube with a proper plane
-// Shapes[1] = new Plane({
-//     x: 0, y: 120, z: 0, 
-//     width: 2000, height: 2000, 
-//     name: "Floor", 
-//     subdivisions: 12, 
-//     orientation: "horizontal"
-// });
-Shapes[1] = new Cube({x: 0, y: 120, z: 0, w: 3000, h: 0, d: 3000, name: "floor", subdivisions: 15});
+Shapes[1] = new Plane({
+    x: 0, y: 120, z: 0, 
+    width: 2000, height: 2000, 
+    name: "Floor", 
+    subdivisions: 12, 
+    orientation: "horizontal"
+});
+// Shapes[1] = new Cube({x: 0, y: 120, z: 0, w: 3000, h: 0, d: 3000, name: "floor", subdivisions: 15});
 Shapes[2] = new Sphere({x: 0, y: 0, z: 100, radius: 150, segments: 15, name: "front sphere"});
 
 Shapes[0].color = { r: 255, g: 100, b: 100 };
