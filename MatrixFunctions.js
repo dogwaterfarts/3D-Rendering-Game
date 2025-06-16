@@ -62,3 +62,8 @@ function vectorDot(a, b) {
     if (!a || !b) return 0;
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
+
+function vectorMagnitude(v) {
+    if (!v) return 0;
+    return Math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2);
+}

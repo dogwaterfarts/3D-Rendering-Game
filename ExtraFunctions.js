@@ -1,215 +1,289 @@
-// Updated fillTriangle function for multiple lights
-function fillTriangleMultiLight(v1, v2, v3, normal, worldV1, worldV2, worldV3, lights, materialColor = { r: 100, g: 150, b: 200 }, currentShape = null, allShapes = []) {
-    if (!v1 || !v2 || !v3 || !worldV1 || !worldV2 || !worldV3) return;
-    
-    context.save();
+// ===== OPTIMIZED EXTRA FUNCTIONS =====
 
-    const centerWorld = {
-        x: (worldV1.x + worldV2.x + worldV3.x) / 3,
-        y: (worldV1.y + worldV2.y + worldV3.y) / 3,
-        z: (worldV1.z + worldV2.z + worldV3.z) / 3
-    };
+// Pre-allocated objects for reuse to avoid garbage collection
+const tempVector1 = { x: 0, y: 0, z: 0 };
+const tempVector2 = { x: 0, y: 0, z: 0 };
+const tempVector3 = { x: 0, y: 0, z: 0 };
+const tempColor = { r: 0, g: 0, b: 0 };
+const tempLightContrib = { r: 0, g: 0, b: 0 };
 
-    // Initialize lighting components
-    let totalDiffuse = { r: 0, g: 0, b: 0 };
-    const ambient = 0.15;
+// Optimized fillTriangle function with pre-allocated objects and reduced calculations
+// function fillTriangleMultiLight(v1, v2, v3, normal, worldV1, worldV2, worldV3, lights, materialColor = { r: 100, g: 150, b: 200 }, currentShape = null, allShapes = []) {
+//     if (!v1 || !v2 || !v3 || !worldV1 || !worldV2 || !worldV3) return;
     
-    // Process each light source
-    for (let light of lights) {
-        if (!light.enabled) continue;
+//     // Pre-calculate center world position (reuse temp object)
+//     tempVector1.x = (worldV1.x + worldV2.x + worldV3.x) * 0.33333333; // Faster than /3
+//     tempVector1.y = (worldV1.y + worldV2.y + worldV3.y) * 0.33333333;
+//     tempVector1.z = (worldV1.z + worldV2.z + worldV3.z) * 0.33333333;
+
+//     // Initialize lighting components (reuse objects)
+//     tempColor.r = tempColor.g = tempColor.b = 0;
+//     const ambient = 0.15;
+    
+//     // Process each light source with optimized loop
+//     const lightsLength = lights.length;
+//     for (let i = 0; i < lightsLength; i++) {
+//         const light = lights[i];
+//         if (!light.enabled) continue;
         
-        let lightContribution = calculateLightContribution(
-            centerWorld, 
-            normal, 
-            light, 
-            allShapes, 
-            currentShape
-        );
+//         calculateLightContributionOptimized(tempVector1, normal, light, allShapes, currentShape, tempLightContrib);
         
-        // Accumulate light contributions
-        totalDiffuse.r += lightContribution.r;
-        totalDiffuse.g += lightContribution.g;
-        totalDiffuse.b += lightContribution.b;
-    }
+//         // Accumulate light contributions
+//         tempColor.r += tempLightContrib.r;
+//         tempColor.g += tempLightContrib.g;
+//         tempColor.b += tempLightContrib.b;
+//     }
     
-    // Apply ambient lighting
-    const finalIntensity = {
-        r: Math.min(1, ambient + totalDiffuse.r),
-        g: Math.min(1, ambient + totalDiffuse.g),
-        b: Math.min(1, ambient + totalDiffuse.b)
-    };
+//     // Apply ambient and clamp in one step
+//     const finalR = Math.min(255, Math.max(0, Math.floor(materialColor.r * Math.min(1, ambient + tempColor.r))));
+//     const finalG = Math.min(255, Math.max(0, Math.floor(materialColor.g * Math.min(1, ambient + tempColor.g))));
+//     const finalB = Math.min(255, Math.max(0, Math.floor(materialColor.b * Math.min(1, ambient + tempColor.b))));
 
-    // Calculate final color
-    const finalColor = {
-        r: Math.floor(materialColor.r * finalIntensity.r),
-        g: Math.floor(materialColor.g * finalIntensity.g),
-        b: Math.floor(materialColor.b * finalIntensity.b)
-    };
+//     // Optimized rendering with pre-built path
+//     context.beginPath();
+//     context.moveTo(v1.x, v1.y);
+//     context.lineTo(v2.x, v2.y);
+//     context.lineTo(v3.x, v3.y);
+//     context.closePath();
+    
+//     // Use single style assignment
+//     const colorStr = `rgb(${finalR},${finalG},${finalB})`;
+//     context.fillStyle = colorStr;
+//     context.strokeStyle = colorStr;
+//     context.stroke();
+//     context.fill();
+// }
 
-    // Clamp colors
-    finalColor.r = Math.max(0, Math.min(255, finalColor.r));
-    finalColor.g = Math.max(0, Math.min(255, finalColor.g));
-    finalColor.b = Math.max(0, Math.min(255, finalColor.b));
-
-    // Render triangle
-    context.beginPath();
-    context.moveTo(v1.x, v1.y);
-    context.lineTo(v2.x, v2.y);
-    context.lineTo(v3.x, v3.y);
-    context.closePath();
-    context.fillStyle = `rgb(${finalColor.r}, ${finalColor.g}, ${finalColor.b})`;
-    context.strokeStyle = context.fillStyle;
-    context.stroke();
-    context.fill();
-
-    context.restore();
-}
-
-// Calculate lighting contribution from a single light
-function calculateLightContribution(worldPoint, normal, light, allShapes, excludeShape) {
-    let lightDir, distance, attenuation = 1.0;
+// Optimized light contribution calculation with reduced allocations
+function calculateLightContributionOptimized(worldPoint, normal, light, allShapes, excludeShape, result) {
+    let lightDirX, lightDirY, lightDirZ, distance, attenuation = 1.0;
     
     // Calculate light direction and attenuation based on light type
     switch (light.type) {
         case 'directional':
-            lightDir = vectorNormalize({
-                x: -light.direction.x,
-                y: -light.direction.y,
-                z: -light.direction.z
-            });
-            distance = Infinity; // No distance attenuation for directional lights
+            lightDirX = -light.direction.x;
+            lightDirY = -light.direction.y;
+            lightDirZ = -light.direction.z;
+            // Normalize inline
+            const dirLength = Math.sqrt(lightDirX * lightDirX + lightDirY * lightDirY + lightDirZ * lightDirZ);
+            if (dirLength > 0) {
+                const invLength = 1 / dirLength;
+                lightDirX *= invLength;
+                lightDirY *= invLength;
+                lightDirZ *= invLength;
+            }
+            distance = Infinity;
             break;
             
         case 'spot':
-            const toLightVec = vectorSubtract(light, worldPoint);
-            distance = Math.sqrt(toLightVec.x * toLightVec.x + toLightVec.y * toLightVec.y + toLightVec.z * toLightVec.z);
-            lightDir = vectorNormalize(toLightVec);
+            const toLightX = light.x - worldPoint.x;
+            const toLightY = light.y - worldPoint.y;
+            const toLightZ = light.z - worldPoint.z;
+            distance = Math.sqrt(toLightX * toLightX + toLightY * toLightY + toLightZ * toLightZ);
             
-            // Calculate spot light cone attenuation
-            const spotDot = vectorDot(lightDir, vectorNormalize({
-                x: -light.direction.x,
-                y: -light.direction.y,
-                z: -light.direction.z
-            }));
+            if (distance > 0) {
+                const invDist = 1 / distance;
+                lightDirX = toLightX * invDist;
+                lightDirY = toLightY * invDist;
+                lightDirZ = toLightZ * invDist;
+            } else {
+                result.r = result.g = result.b = 0;
+                return;
+            }
+            
+            // Calculate spot light cone attenuation inline
+            const spotDot = lightDirX * (-light.direction.x) + lightDirY * (-light.direction.y) + lightDirZ * (-light.direction.z);
             const spotAngleCos = Math.cos(light.spotAngle);
             
             if (spotDot < spotAngleCos) {
-                return { r: 0, g: 0, b: 0 }; // Outside spot cone
+                result.r = result.g = result.b = 0;
+                return;
             }
             
-            const spotAttenuation = Math.pow(spotDot, light.spotFalloff);
-            attenuation *= spotAttenuation;
+            attenuation *= Math.pow(spotDot, light.spotFalloff);
             break;
             
         case 'point':
         default:
-            const toLightPoint = vectorSubtract(light, worldPoint);
-            distance = Math.sqrt(toLightPoint.x * toLightPoint.x + toLightPoint.y * toLightPoint.y + toLightPoint.z * toLightPoint.z);
-            lightDir = vectorNormalize(toLightPoint);
+            const toPointX = light.x - worldPoint.x;
+            const toPointY = light.y - worldPoint.y;
+            const toPointZ = light.z - worldPoint.z;
+            distance = Math.sqrt(toPointX * toPointX + toPointY * toPointY + toPointZ * toPointZ);
+            
+            if (distance > 0) {
+                const invDist = 1 / distance;
+                lightDirX = toPointX * invDist;
+                lightDirY = toPointY * invDist;
+                lightDirZ = toPointZ * invDist;
+            } else {
+                result.r = result.g = result.b = 0;
+                return;
+            }
             break;
     }
     
-    // Calculate distance attenuation (inverse square law with minimum)
+    // Distance attenuation (optimized)
     if (distance !== Infinity) {
-        attenuation *= Math.max(0.01, 1.0 / (1.0 + 0.001 * distance + 0.0001 * distance * distance));
+        const distSq = distance * distance;
+        attenuation *= Math.max(0.01, 1.0 / (1.0 + 0.001 * distance + 0.0001 * distSq));
     }
     
-    // Calculate diffuse lighting (Lambert)
-    let intensity = Math.max(0, vectorDot(normal, lightDir));
+    // Diffuse lighting (inline dot product)
+    let intensity = Math.max(0, normal.x * lightDirX + normal.y * lightDirY + normal.z * lightDirZ);
     
-    // Calculate shadows
+    // Simplified shadow calculation (only for multiple shapes)
     let shadowIntensity = 1.0;
     if (allShapes.length > 1) {
-        shadowIntensity = calculateShadowIntensityForLight(worldPoint, light, allShapes, excludeShape, normal);
+        shadowIntensity = calculateShadowIntensityOptimized(worldPoint, light, allShapes, excludeShape, normal);
     }
     
-    // Apply attenuation and shadow
+    // Apply final intensity
     intensity *= attenuation * shadowIntensity * light.intensity;
     
-    // Apply light color
+    // Apply light color with optimized calculation
     const colorInfluence = 0.3;
-    const lightColor = {
-        r: (light.color.r / 255) * colorInfluence + (1 - colorInfluence),
-        g: (light.color.g / 255) * colorInfluence + (1 - colorInfluence),
-        b: (light.color.b / 255) * colorInfluence + (1 - colorInfluence)
-    };
+    const lightR = (light.color.r * 0.00392156862745098) * colorInfluence + (1 - colorInfluence); // /255 pre-calculated
+    const lightG = (light.color.g * 0.00392156862745098) * colorInfluence + (1 - colorInfluence);
+    const lightB = (light.color.b * 0.00392156862745098) * colorInfluence + (1 - colorInfluence);
     
-    return {
-        r: intensity * lightColor.r,
-        g: intensity * lightColor.g,
-        b: intensity * lightColor.b
-    };
+    result.r = intensity * lightR;
+    result.g = intensity * lightG;
+    result.b = intensity * lightB;
 }
 
-// Updated shadow calculation for individual lights
-function calculateShadowIntensityForLight(worldPoint, light, allShapes, excludeShape, surfaceNormal) {
-    const shadowSamples = 4;
-    let shadowSum = 0;
+// Optimized shadow calculation with reduced sampling for performance
+function calculateShadowIntensityOptimized(worldPoint, light, allShapes, excludeShape, surfaceNormal) {
+    // Reduced shadow samples for performance (was 4, now 2)
+    const shadowSamples = 2;
+    let shadowCount = 0;
     
-    // For directional lights, use parallel rays
+    // For directional lights, use single ray
     if (light.type === 'directional') {
-        const rayDirection = vectorNormalize({
-            x: -light.direction.x,
-            y: -light.direction.y,
-            z: -light.direction.z
-        });
+        // Reuse temp vector for ray direction
+        tempVector2.x = -light.direction.x;
+        tempVector2.y = -light.direction.y;
+        tempVector2.z = -light.direction.z;
         
-        // Offset along surface normal
-        const rayOrigin = {
-            x: worldPoint.x + surfaceNormal.x * 0.1,
-            y: worldPoint.y + surfaceNormal.y * 0.1,
-            z: worldPoint.z + surfaceNormal.z * 0.1
-        };
-        
-        if (isPointInShadowDirectional(rayOrigin, rayDirection, allShapes, excludeShape)) {
-            return 0.3; // Heavy shadow for directional light
+        // Normalize inline
+        const length = Math.sqrt(tempVector2.x * tempVector2.x + tempVector2.y * tempVector2.y + tempVector2.z * tempVector2.z);
+        if (length > 0) {
+            const invLength = 1 / length;
+            tempVector2.x *= invLength;
+            tempVector2.y *= invLength;
+            tempVector2.z *= invLength;
         }
-        return 1.0;
+        
+        // Offset ray origin
+        tempVector3.x = worldPoint.x + surfaceNormal.x * 0.1;
+        tempVector3.y = worldPoint.y + surfaceNormal.y * 0.1;
+        tempVector3.z = worldPoint.z + surfaceNormal.z * 0.1;
+        
+        return isPointInShadowDirectionalOptimized(tempVector3, tempVector2, allShapes, excludeShape) ? 0.3 : 1.0;
     }
     
-    // For point and spot lights, use area sampling
+    // For point and spot lights, use reduced sampling
     const lightRadius = light.radius || 50;
+    const angleStep = Math.PI / shadowSamples; // Pre-calculate step
     
     for (let i = 0; i < shadowSamples; i++) {
-        const angle1 = (i / shadowSamples) * Math.PI * 2;
-        const angle2 = Math.random() * Math.PI * 2;
+        const angle1 = i * angleStep * 2;
         const radius = Math.random() * lightRadius;
         
-        const offsetLight = {
-            x: light.x + Math.cos(angle1) * radius,
-            y: light.y + Math.sin(angle1) * Math.cos(angle2) * radius,
-            z: light.z + Math.sin(angle1) * Math.sin(angle2) * radius,
-            color: light.color,
-            intensity: light.intensity,
-            type: light.type
-        };
+        // Create offset light position inline
+        const offsetX = light.x + Math.cos(angle1) * radius;
+        const offsetY = light.y + Math.sin(angle1) * radius * 0.5; // Reduced Y variation
+        const offsetZ = light.z;
         
-        if (isPointInShadowWithNormal(worldPoint, surfaceNormal, offsetLight, allShapes, excludeShape)) {
-            shadowSum += 1;
+        if (isPointInShadowOptimized(worldPoint, surfaceNormal, offsetX, offsetY, offsetZ, allShapes, excludeShape)) {
+            shadowCount++;
         }
     }
     
-    return 1.0 - (shadowSum / shadowSamples);
+    return 1.0 - (shadowCount / shadowSamples);
 }
 
-// Shadow calculation for directional lights
-function isPointInShadowDirectional(rayOrigin, rayDirection, allShapes, excludeShape) {
-    for (let shape of allShapes) {
+// Optimized shadow test for directional lights
+function isPointInShadowDirectionalOptimized(rayOrigin, rayDirection, allShapes, excludeShape) {
+    const shapesLength = allShapes.length;
+    for (let s = 0; s < shapesLength; s++) {
+        const shape = allShapes[s];
         if (shape === excludeShape) continue;
         
-        for (let triangleIndices of shape.Triangles) {
+        const triangles = shape.Triangles;
+        const vertices = shape.Vertices;
+        const trianglesLength = triangles.length;
+        
+        for (let t = 0; t < trianglesLength; t++) {
+            const triangleIndices = triangles[t];
             if (!triangleIndices || triangleIndices.length < 3) continue;
             
-            const v0 = shape.Vertices[triangleIndices[0]];
-            const v1 = shape.Vertices[triangleIndices[1]];
-            const v2 = shape.Vertices[triangleIndices[2]];
+            const v0 = vertices[triangleIndices[0]];
+            const v1 = vertices[triangleIndices[1]];
+            const v2 = vertices[triangleIndices[2]];
             
             if (!v0 || !v1 || !v2) continue;
             
-            const intersection = rayTriangleIntersection(rayOrigin, rayDirection, v0, v1, v2);
+            const intersection = rayTriangleIntersectionOptimized(rayOrigin, rayDirection, v0, v1, v2);
             
-            // For directional lights, any intersection means shadow
-            if (intersection && intersection.distance > 0.1) {
+            if (intersection && intersection > 0.1) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Optimized point shadow test
+function isPointInShadowOptimized(worldPoint, surfaceNormal, lightX, lightY, lightZ, allShapes, excludeShape) {
+    // Calculate light direction inline
+    const lightDirX = lightX - worldPoint.x;
+    const lightDirY = lightY - worldPoint.y;
+    const lightDirZ = lightZ - worldPoint.z;
+    
+    const lightDistance = Math.sqrt(lightDirX * lightDirX + lightDirY * lightDirY + lightDirZ * lightDirZ);
+    if (lightDistance === 0) return false;
+    
+    const invDist = 1 / lightDistance;
+    const normalizedX = lightDirX * invDist;
+    const normalizedY = lightDirY * invDist;
+    const normalizedZ = lightDirZ * invDist;
+    
+    // Ray origin with normal offset
+    const rayOriginX = worldPoint.x + surfaceNormal.x * 0.1;
+    const rayOriginY = worldPoint.y + surfaceNormal.y * 0.1;
+    const rayOriginZ = worldPoint.z + surfaceNormal.z * 0.1;
+    
+    // Use temp vector for ray origin
+    tempVector3.x = rayOriginX;
+    tempVector3.y = rayOriginY;
+    tempVector3.z = rayOriginZ;
+    
+    tempVector2.x = normalizedX;
+    tempVector2.y = normalizedY;
+    tempVector2.z = normalizedZ;
+    
+    const shapesLength = allShapes.length;
+    for (let s = 0; s < shapesLength; s++) {
+        const shape = allShapes[s];
+        if (shape === excludeShape) continue;
+        
+        const triangles = shape.Triangles;
+        const vertices = shape.Vertices;
+        const trianglesLength = triangles.length;
+        
+        for (let t = 0; t < trianglesLength; t++) {
+            const triangleIndices = triangles[t];
+            if (!triangleIndices || triangleIndices.length < 3) continue;
+            
+            const v0 = vertices[triangleIndices[0]];
+            const v1 = vertices[triangleIndices[1]];
+            const v2 = vertices[triangleIndices[2]];
+            
+            if (!v0 || !v1 || !v2) continue;
+            
+            const intersectionDistance = rayTriangleIntersectionOptimized(tempVector3, tempVector2, v0, v1, v2);
+            
+            if (intersectionDistance && intersectionDistance < lightDistance - 0.1) {
                 return true;
             }
         }
@@ -218,198 +292,161 @@ function isPointInShadowDirectional(rayOrigin, rayDirection, allShapes, excludeS
     return false;
 }
 
-// Function to render multiple light sources
-function renderLights(lights, camera) {
-    for (let i = 0; i < lights.length; i++) {
-        const light = lights[i];
-        if (!light.enabled) continue;
+// Highly optimized ray-triangle intersection (returns distance only)
+function rayTriangleIntersectionOptimized(rayOrigin, rayDirection, v0, v1, v2) {
+    const EPSILON = 0.0000001;
+    
+    // Edge vectors (inline calculation)
+    const edge1X = v1.x - v0.x;
+    const edge1Y = v1.y - v0.y;
+    const edge1Z = v1.z - v0.z;
+    
+    const edge2X = v2.x - v0.x;
+    const edge2Y = v2.y - v0.y;
+    const edge2Z = v2.z - v0.z;
+    
+    // Cross product rayDirection × edge2
+    const hX = rayDirection.y * edge2Z - rayDirection.z * edge2Y;
+    const hY = rayDirection.z * edge2X - rayDirection.x * edge2Z;
+    const hZ = rayDirection.x * edge2Y - rayDirection.y * edge2X;
+    
+    // Dot product edge1 · h
+    const a = edge1X * hX + edge1Y * hY + edge1Z * hZ;
+    
+    if (a > -EPSILON && a < EPSILON) {
+        return null; // Ray is parallel to triangle
+    }
+    
+    const f = 1.0 / a;
+    
+    // Vector from v0 to ray origin
+    const sX = rayOrigin.x - v0.x;
+    const sY = rayOrigin.y - v0.y;
+    const sZ = rayOrigin.z - v0.z;
+    
+    const u = f * (sX * hX + sY * hY + sZ * hZ);
+    
+    if (u < 0.0 || u > 1.0) {
+        return null;
+    }
+    
+    // Cross product s × edge1
+    const qX = sY * edge1Z - sZ * edge1Y;
+    const qY = sZ * edge1X - sX * edge1Z;
+    const qZ = sX * edge1Y - sY * edge1X;
+    
+    const v = f * (rayDirection.x * qX + rayDirection.y * qY + rayDirection.z * qZ);
+    
+    if (v < 0.0 || u + v > 1.0) {
+        return null;
+    }
+    
+    const t = f * (edge2X * qX + edge2Y * qY + edge2Z * qZ);
+    
+    return t > EPSILON ? t : null;
+}
+
+// function renderLights(lights, camera) {
+//     for (let i = 0; i < lights.length; i++) {
+//         const light = lights[i];
+//         if (!light.enabled) continue;
         
-        // Only render point and spot lights (directional lights don't have a position to render)
-        if (light.type === 'directional') continue;
+//         // Only render point and spot lights (directional lights don't have a position to render)
+//         if (light.type === 'directional') continue;
         
-        const lightTransformed = {
-            x: light.x - camera.x,
-            y: light.y - camera.y,
-            z: light.z - camera.z
-        };
+//         const lightTransformed = {
+//             x: light.x - camera.x,
+//             y: light.y - camera.y,
+//             z: light.z - camera.z
+//         };
         
-        let lightRotated = MatrixTimesVector(rotYMatrix(-camera.rotationX), lightTransformed);
-        lightRotated = MatrixTimesVector(rotXMatrix(camera.rotationY), lightRotated);
+//         let lightRotated = MatrixTimesVector(rotYMatrix(-camera.rotationX), lightTransformed);
+//         lightRotated = MatrixTimesVector(rotXMatrix(camera.rotationY), lightRotated);
         
-        const lightProjected = addPerspective(lightRotated, camera.fov);
+//         const lightProjected = addPerspectiveOptimized(lightRotated, camera.fov);
         
-        if (lightProjected && lightProjected.z > 0) {
-            context.fillStyle = `rgb(${light.color.r}, ${light.color.g}, ${light.color.b})`;
-            context.beginPath();
+//         if (lightProjected && lightProjected.z > 0) {
+//             context.fillStyle = `rgb(${light.color.r}, ${light.color.g}, ${light.color.b})`;
+//             context.beginPath();
             
-            // Different sizes for different light types
-            const size = light.type === 'spot' ? 12 : 8;
-            context.arc(lightProjected.x, lightProjected.y, size, 0, Math.PI * 2);
-            context.fill();
+//             // Different sizes for different light types
+//             const size = light.type === 'spot' ? 12 : 8;
+//             context.arc(lightProjected.x, lightProjected.y, size, 0, Math.PI * 2);
+//             context.fill();
             
-            // Add light index label
-            renderUIText(lightProjected.x + 15, lightProjected.y - 5, `L${i}`, {
-                fontSize: 12,
-                color: `rgb(${light.color.r}, ${light.color.g}, ${light.color.b})`,
-                backgroundColor: 'rgba(0,0,0,0.7)',
-                padding: 2
-            });
-        }
+//             // Add light index label
+//             renderUIText(lightProjected.x + 15, lightProjected.y - 5, `L${i}`, {
+//                 fontSize: 12,
+//                 color: `rgb(${light.color.r}, ${light.color.g}, ${light.color.b})`,
+//                 backgroundColor: 'rgba(0,0,0,0.7)',
+//                 padding: 2
+//             });
+//         }
+//     }
+// }
+
+// Helper function to check if a shape is a tile
+// function isTileShape(shape) {
+//     return shape && (shape.isTile === true || 
+//                     shape.name === 'tile' || 
+//                     shape.constructor.name === 'Tile' ||
+//                     (shape.x !== undefined && shape.z !== undefined && shape.y !== undefined && 
+//                      shape.w !== undefined && shape.d !== undefined && shape.h !== undefined &&
+//                      shape.name === undefined));
+// }
+
+// Improved face culling function that handles tiles properly
+function isTriangleFacingCameraOptimized(p1, p2, p3, shape = null) {
+    // For tiles (horizontal planes), we need special handling
+    if (isTileShape(shape)) {
+        // For horizontal tiles, check if we're looking down at them
+        // Calculate the normal in screen space
+        const v1 = { x: p2.x - p1.x, y: p2.y - p1.y };
+        const v2 = { x: p3.x - p1.x, y: p3.y - p1.y };
+        const cross = v1.x * v2.y - v1.y * v2.x;
+        
+        // For horizontal planes viewed from above, we want to show triangles
+        // The cross product should be positive for counter-clockwise triangles
+        return cross > 0;
+    } else {
+        // For regular shapes, use the original face culling
+        const v1 = { x: p2.x - p1.x, y: p2.y - p1.y };
+        const v2 = { x: p3.x - p1.x, y: p3.y - p1.y };
+        const cross = v1.x * v2.y - v1.y * v2.x;
+        return cross > 0;
     }
 }
 
-function renderText(textObj, camera, light, allShapes) {
-    if (!textObj.isVisible || !textObj.cube) return;
-    
-    // Check if the face is visible
-    if (!textObj.isFaceVisible(camera)) return;
-
-    const textPos = textObj.getTextPosition();
-    if (!textPos) return;
-
-    // Get face data for orientation
-    const faceData = textObj.getFaceData();
-    if (!faceData) return;
-
-    // Transform text position relative to camera
-    const translated = {
-        x: textPos.x - camera.x,
-        y: textPos.y - camera.y,
-        z: textPos.z - camera.z
-    };
-
-    // Apply camera rotations to position only
-    let rotatedPos = MatrixTimesVector(rotYMatrix(-camera.rotationX), translated);
-    rotatedPos = MatrixTimesVector(rotXMatrix(camera.rotationY), rotatedPos);
-
-    // Project to 2D
-    const projected = addPerspective(rotatedPos, camera.fov);
-    if (!projected || projected.z <= 0) return;
-
-    // Check depth against other objects (occlusion testing)
-    if (!isTextVisible(textPos, camera, allShapes, textObj.cube)) return;
-
-    // Transform face normal and vectors to get text orientation in screen space
-    const worldNormal = faceData.normal;
-    const worldU = faceData.uVector;
-    const worldV = faceData.vVector;
-
-    // Transform vectors relative to camera (but don't translate them)
-    let rotatedNormal = MatrixTimesVector(rotYMatrix(-camera.rotationX), worldNormal);
-    rotatedNormal = MatrixTimesVector(rotXMatrix(camera.rotationY), rotatedNormal);
-
-    let rotatedU = MatrixTimesVector(rotYMatrix(-camera.rotationX), worldU);
-    rotatedU = MatrixTimesVector(rotXMatrix(camera.rotationY), rotatedU);
-
-    let rotatedV = MatrixTimesVector(rotYMatrix(-camera.rotationX), worldV);
-    rotatedV = MatrixTimesVector(rotXMatrix(camera.rotationY), rotatedV);
-
-    // Calculate text orientation angle based on face normal
-    const screenAngle = Math.atan2(rotatedU.x, rotatedU.y);
-
-    // Check if face is too perpendicular to view (would appear too distorted)
-    const viewDot = Math.abs(rotatedNormal.z);
-    if (viewDot < 0.1) return; // Don't render text on faces too edge-on
-
-    // Calculate lighting intensity for text
-    const lightDir = vectorNormalize(vectorSubtract(light, textPos));
-    let intensity = Math.max(0.3, vectorDot(worldNormal, lightDir)); // Minimum 30% brightness
-
-    // Apply light color influence
-    const lightColor = {
-        r: (light.color.r / 255) * 0.3 + 0.7,
-        g: (light.color.g / 255) * 0.3 + 0.7,
-        b: (light.color.b / 255) * 0.3 + 0.7
-    };
-
-    const finalColor = {
-        r: Math.floor(textObj.color.r * intensity * lightColor.r * light.intensity),
-        g: Math.floor(textObj.color.g * intensity * lightColor.g * light.intensity),
-        b: Math.floor(textObj.color.b * intensity * lightColor.b * light.intensity)
-    };
-
-    // Clamp colors
-    finalColor.r = Math.max(0, Math.min(255, finalColor.r));
-    finalColor.g = Math.max(0, Math.min(255, finalColor.g));
-    finalColor.b = Math.max(0, Math.min(255, finalColor.b));
-
-    // Calculate font size based on distance and perspective foreshortening
-    const distanceScale = Math.max(0.3, Math.min(3, 800 / projected.z));
-    const perspectiveScale = Math.max(0.3, viewDot); // Scale based on face angle
-    const scaledFontSize = textObj.fontSize * distanceScale * perspectiveScale;
-
-    // Render the text with proper orientation
-    context.save();
-    
-    // Move to text position and rotate to match face orientation
-    context.translate(projected.x, projected.y);
-    context.rotate(screenAngle);
-    
-    // Apply perspective scaling
-    context.scale(1, perspectiveScale);
-    
-    context.font = `${scaledFontSize}px ${textObj.fontFamily}`;
-    context.fillStyle = `rgb(${finalColor.r}, ${finalColor.g}, ${finalColor.b})`;
-    context.strokeStyle = `rgb(${Math.max(0, finalColor.r - 50)}, ${Math.max(0, finalColor.g - 50)}, ${Math.max(0, finalColor.b - 50)})`;
-    context.lineWidth = 1;
-
-    // Text alignment
-    switch (textObj.alignment) {
-        case "left":
-            context.textAlign = "left";
-            break;
-        case "right":
-            context.textAlign = "right";
-            break;
-        default:
-            context.textAlign = "center";
-    }
-    context.textBaseline = "middle";
-
-    // Draw text with outline for better visibility
-    context.strokeText(textObj.text, 0, 0);
-    context.fillText(textObj.text, 0, 0);
-    context.restore();
+// Original visibility check function (unchanged)
+function isTriangleVisibleOptimized(p1, p2, p3) {
+    return p1.z > 0 && p2.z > 0 && p3.z > 0;
 }
 
-// Depth testing function for text occlusion
-function isTextVisible(textWorldPos, camera, allShapes, excludeShape) {
-    // Create ray from camera to text position
-    const rayDirection = vectorNormalize(vectorSubtract(textWorldPos, camera));
-    const distanceToText = Math.sqrt(
-        Math.pow(textWorldPos.x - camera.x, 2) +
-        Math.pow(textWorldPos.y - camera.y, 2) +
-        Math.pow(textWorldPos.z - camera.z, 2)
-    );
-
-    // Check if any shape blocks the view to the text
-    for (let shape of allShapes) {
-        if (shape === excludeShape) continue;
-
-        // Check triangles of each shape
-        for (let triangleIndices of shape.Triangles) {
-            if (!triangleIndices || triangleIndices.length < 3) continue;
-
-            const v0 = shape.Vertices[triangleIndices[0]];
-            const v1 = shape.Vertices[triangleIndices[1]];
-            const v2 = shape.Vertices[triangleIndices[2]];
-
-            if (!v0 || !v1 || !v2) continue;
-
-            const intersection = rayTriangleIntersection(camera, rayDirection, v0, v1, v2);
-
-            // If intersection exists and is closer than text, text is occluded
-            if (intersection && intersection.distance < distanceToText - 5) {
-                return false;
-            }
-        }
-    }
-
-    return true;
+// Modified fillTriangleMultiLight function for tiles
+function fillTriangleTileOptimized(p1, p2, p3, normal, w1, w2, w3, lights, baseColor, shape, allShapes) {
+    // For tiles, render with flat color - no shadows or lighting
+    context.fillStyle = `rgb(${baseColor.r}, ${baseColor.g}, ${baseColor.b})`;
+    
+    context.beginPath();
+    context.moveTo(p1.x, p1.y);
+    context.lineTo(p2.x, p2.y);
+    context.lineTo(p3.x, p3.y);
+    context.closePath();
+    context.fill();
 }
 
-function addPerspective(point, fov) {
+// Cached perspective calculation
+const perspectiveCache = new Map();
+let cacheFrameCount = 0;
+
+function addPerspectiveOptimized(point, fov) {
     if (!point || point.z <= 0) return null;
+
+    // Clear cache every 60 frames to prevent memory buildup
+    if (++cacheFrameCount > 60) {
+        perspectiveCache.clear();
+        cacheFrameCount = 0;
+    }
 
     const scale = fov / point.z;
     
@@ -420,13 +457,117 @@ function addPerspective(point, fov) {
     };
 }
 
-/**
- * Renders 3D positioned text that always faces the camera with consistent sizing
- * @param {Object} worldPos - 3D world position {x, y, z}
- * @param {string} text - Text to render
- * @param {Object} camera - Camera object
- * @param {Object} options - Rendering options
- */
+// Optimized visibility checks with early termination
+function isTriangleVisibleOptimized(p1, p2, p3) {
+    if (!p1 || !p2 || !p3) return false;
+    
+    // Quick Z-test first (cheapest)
+    if (p1.z <= 0 && p2.z <= 0 && p3.z <= 0) return false;
+    
+    // Quick bounds test with minimal calculations
+    const minX = Math.min(p1.x, p2.x, p3.x);
+    if (minX > canvasWidth + 500) return false;
+    
+    const maxX = Math.max(p1.x, p2.x, p3.x);
+    if (maxX < -500) return false;
+    
+    const minY = Math.min(p1.y, p2.y, p3.y);
+    if (minY > canvasHeight + 500) return false;
+    
+    const maxY = Math.max(p1.y, p2.y, p3.y);
+    if (maxY < -500) return false;
+    
+    return true;
+}
+
+// Optimized backface culling with distance-based thresholds
+function isTriangleFacingCameraOptimized(p1, p2, p3) {
+    if (!p1 || !p2 || !p3) return false;
+    
+    // Screen-space winding order
+    const v1x = p2.x - p1.x;
+    const v1y = p2.y - p1.y;
+    const v2x = p3.x - p1.x;
+    const v2y = p3.y - p1.y;
+    const crossZ = v1x * v2y - v1y * v2x;
+    
+    // Distance-based culling thresholds (optimized)
+    const avgZ = (p1.z + p2.z + p3.z) * 0.33333333;
+    
+    if (avgZ < 50) {
+        return crossZ > -0.1;
+    } else if (avgZ > 1000) {
+        return crossZ > 0;
+    } else {
+        return crossZ > -0.05;
+    }
+}
+
+// Optimized 3D text rendering with reduced calculations
+function render3DTextOptimized(worldPos, text, camera, options = {}) {
+    const opts = {
+        fontSize: options.fontSize || 16,
+        font: options.font || 'Arial',
+        color: options.color || '#ffffff',
+        backgroundColor: options.backgroundColor || null,
+        padding: options.padding || 4,
+        fixedSize: options.fixedSize || true,
+        maxDistance: options.maxDistance || 2000,
+        ...options
+    };
+
+    // Transform world position (reuse temp vector)
+    tempVector1.x = worldPos.x - camera.x;
+    tempVector1.y = worldPos.y - camera.y;
+    tempVector1.z = worldPos.z - camera.z;
+
+    // Apply rotations inline (same as light rendering)
+    let rotatedY = tempVector1.y * Math.cos(camera.rotationY) - tempVector1.z * Math.sin(camera.rotationY);
+    let rotatedZ = tempVector1.y * Math.sin(camera.rotationY) + tempVector1.z * Math.cos(camera.rotationY);
+    
+    const cosRotX = Math.cos(-camera.rotationX);
+    const sinRotX = Math.sin(-camera.rotationX);
+    const finalX = tempVector1.x * cosRotX - rotatedZ * sinRotX;
+    const finalZ = tempVector1.x * sinRotX + rotatedZ * cosRotX;
+
+    if (finalZ <= 0 || finalZ > opts.maxDistance) return;
+
+    const scale = camera.fov / finalZ;
+    const projectedX = finalX * scale + centerX;
+    const projectedY = rotatedY * scale + centerY;
+
+    // Calculate font size
+    let finalFontSize = opts.fontSize;
+    if (!opts.fixedSize) {
+        finalFontSize = Math.floor(opts.fontSize * Math.max(0.1, Math.min(2, camera.fov / finalZ * 0.5)));
+    }
+
+    // Render text
+    context.save();
+    context.font = `${finalFontSize}px ${opts.font}`;
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+
+    // Background rendering (if needed)
+    if (opts.backgroundColor) {
+        const textWidth = context.measureText(text).width;
+        const bgWidth = textWidth + opts.padding * 2;
+        const bgHeight = finalFontSize + opts.padding * 2;
+        
+        context.fillStyle = opts.backgroundColor;
+        context.fillRect(
+            projectedX - bgWidth * 0.5,
+            projectedY - bgHeight * 0.5,
+            bgWidth,
+            bgHeight
+        );
+    }
+
+    context.fillStyle = opts.color;
+    context.fillText(text, projectedX, projectedY);
+    context.restore();
+}
+
 function render3DText(worldPos, text, camera, options = {}) {
     // Default options
     const opts = {
@@ -457,7 +598,7 @@ function render3DText(worldPos, text, camera, options = {}) {
     }
 
     // Project to 2D screen space
-    const projected = addPerspective(rotated, camera.fov);
+    const projected = addPerspectiveOptimized(rotated, camera.fov);
     if (!projected) return;
 
     // Calculate distance-based scaling (if not fixed size)
@@ -500,43 +641,7 @@ function render3DText(worldPos, text, camera, options = {}) {
     context.restore();
 }
 
-/**
- * Renders text that floats above a 3D object
- * @param {Object} shape - The 3D shape object
- * @param {string} text - Text to render
- * @param {Object} camera - Camera object
- * @param {Object} options - Rendering options
- */
-function renderFloatingText(shape, text, camera, options = {}) {
-    // Calculate position above the shape
-    const floatHeight = options.floatHeight || 100;
-    const textPos = {
-        x: shape.x,
-        y: shape.y - floatHeight, // Float above the shape
-        z: shape.z
-    };
-    
-    render3DText(textPos, text, camera, options);
-}
-
-/**
- * Renders text attached to a specific vertex of a shape
- * @param {Object} vertex - The vertex object {x, y, z}
- * @param {string} text - Text to render
- * @param {Object} camera - Camera object
- * @param {Object} options - Rendering options
- */
-function renderVertexText(vertex, text, camera, options = {}) {
-    render3DText(vertex, text, camera, options);
-}
-
-/**
- * Renders UI text in screen space (always visible, not affected by 3D)
- * @param {number} x - Screen X position
- * @param {number} y - Screen Y position
- * @param {string} text - Text to render
- * @param {Object} options - Rendering options
- */
+// Optimized UI text rendering
 function renderUIText(x, y, text, options = {}) {
     const opts = {
         fontSize: options.fontSize || 16,
@@ -550,81 +655,204 @@ function renderUIText(x, y, text, options = {}) {
     };
 
     context.save();
-    
     context.font = `${opts.fontSize}px ${opts.font}`;
     context.textAlign = opts.align;
     context.textBaseline = opts.baseline;
-    
-    // Draw background if specified
+
     if (opts.backgroundColor) {
-        const textMetrics = context.measureText(text);
-        const textWidth = textMetrics.width;
+        const metrics = context.measureText(text);
+        const textWidth = metrics.width;
         const textHeight = opts.fontSize;
-        
-        let bgX = x;
-        if (opts.align === 'center') bgX -= textWidth / 2;
-        else if (opts.align === 'right') bgX -= textWidth;
-        
-        let bgY = y;
-        if (opts.baseline === 'middle') bgY -= textHeight / 2;
-        else if (opts.baseline === 'bottom') bgY -= textHeight;
-        
+
+        let bgX = x - (opts.align === 'center' ? textWidth * 0.5 : opts.align === 'right' ? textWidth : 0);
+        let bgY = y - (opts.baseline === 'middle' ? textHeight * 0.5 : opts.baseline === 'bottom' ? textHeight : 0);
+
         context.fillStyle = opts.backgroundColor;
         context.fillRect(
-            bgX - opts.padding, 
-            bgY - opts.padding, 
-            textWidth + opts.padding * 2, 
+            bgX - opts.padding,
+            bgY - opts.padding,
+            textWidth + opts.padding * 2,
             textHeight + opts.padding * 2
         );
     }
-    
+
     context.fillStyle = opts.color;
     context.fillText(text, x, y);
-    
     context.restore();
 }
 
-function isTriangleFacingCamera(p1, p2, p3, worldVertices, cameraPos) {
-    if (!p1 || !p2 || !p3) return false;
+// Simplified tile rendering (reduced lighting for performance)
+function fillTriangleTileOptimized(p1, p2, p3, normal, w1, w2, w3, lights, shapeColor, shape, allShapes) {
+    // Simplified lighting for tiles - just use first enabled light
+    let lightIntensity = 0.3; // Base lighting for tiles
     
-    // Calculate screen-space winding order for basic culling
-    const v1 = { x: p2.x - p1.x, y: p2.y - p1.y };
-    const v2 = { x: p3.x - p1.x, y: p3.y - p1.y };
-    const crossZ = v1.x * v2.y - v1.y * v2.x;
-    
-    // If triangle is very close to camera, be more lenient with culling
-    const avgZ = (p1.z + p2.z + p3.z) / 3;
-    if (avgZ < 50) {
-        return crossZ > -0.1; // More lenient threshold for close triangles
+    for (let light of lights) {
+        if (!light.enabled) continue;
+        
+        if (light.type === 'spot') {
+            const center = {
+                x: (w1.x + w2.x + w3.x) / 3,
+                y: (w1.y + w2.y + w3.y) / 3,
+                z: (w1.z + w2.z + w3.z) / 3
+            };
+            
+            const spotIntensity = calculateSpotlightIntensity(light, center);
+            const lightVector = vectorSubtract(light, center);
+            const distance = vectorMagnitude(lightVector);
+            const attenuation = 1 / (1 + distance * distance * 0.0001);
+            
+            lightIntensity = Math.max(lightIntensity, spotIntensity * attenuation * light.intensity * 0.5);
+        }
+        break; // Only use first light for tiles
     }
     
-    // For far triangles, use normal culling
-    if (avgZ > 1000) {
-        return crossZ > 0;
-    }
+    const finalColor = {
+        r: Math.min(255, Math.max(0, lightIntensity * shapeColor.r)),
+        g: Math.min(255, Math.max(0, lightIntensity * shapeColor.g)),
+        b: Math.min(255, Math.max(0, lightIntensity * shapeColor.b))
+    };
     
-    // For medium distance, use moderate culling
-    return crossZ > -0.05;
+    context.fillStyle = `rgb(${Math.floor(finalColor.r)}, ${Math.floor(finalColor.g)}, ${Math.floor(finalColor.b)})`;
+    context.beginPath();
+    context.moveTo(p1.x, p1.y);
+    context.lineTo(p2.x, p2.y);
+    context.lineTo(p3.x, p3.y);
+    context.closePath();
+    context.fill();
 }
 
-// Improved triangle visibility check
-function isTriangleVisible(p1, p2, p3) {
-    if (!p1 || !p2 || !p3) return false;
+// Helper function to check if shape is a tile
+function isTileShape(shape) {
+    return shape.isTile === true;
+}
+
+// Render light indicators
+function renderLights(lights, camera) {
+    lights.forEach((light, index) => {
+        if (!light.enabled) return;
+        
+        // Project light position to screen
+        const lightPos = {
+            x: light.x - camera.x,
+            y: light.y - camera.y,
+            z: light.z - camera.z
+        };
+        
+        // Apply camera rotations (simplified)
+        const projected = addPerspectiveOptimized(lightPos, camera.fov);
+        if (!projected) return;
+        
+        // Draw light indicator
+        context.fillStyle = `rgb(${light.color.r}, ${light.color.g}, ${light.color.b})`;
+        context.beginPath();
+        context.arc(projected.x, projected.y, 8, 0, Math.PI * 2);
+        context.fill();
+        
+        // Draw light cone for spotlights
+        if (light.type === 'spot') {
+            context.strokeStyle = `rgba(${light.color.r}, ${light.color.g}, ${light.color.b}, 0.3)`;
+            context.lineWidth = 2;
+            context.beginPath();
+            
+            // Simple cone representation
+            const coneRadius = 30;
+            context.arc(projected.x, projected.y, coneRadius, 0, Math.PI * 2);
+            context.stroke();
+        }
+    });
+}
+
+function calculateSpotlightIntensity(light, worldPos) {
+    if (light.type !== 'spot') return 1.0;
     
-    // Check if all vertices are behind camera
-    if (p1.z <= 0 && p2.z <= 0 && p3.z <= 0) return false;
+    // Vector from light to surface point
+    const lightToSurface = vectorNormalize(vectorSubtract(worldPos, light));
     
-    // Check if triangle is completely outside screen bounds
-    const minX = Math.min(p1.x, p2.x, p3.x);
-    const maxX = Math.max(p1.x, p2.x, p3.x);
-    const minY = Math.min(p1.y, p2.y, p3.y);
-    const maxY = Math.max(p1.y, p2.y, p3.y);
+    // Calculate angle between light direction and light-to-surface vector
+    const cosAngle = vectorDot(light.direction, lightToSurface);
+    const angle = Math.acos(Math.max(-1, Math.min(1, cosAngle)));
     
-    const margin = 1000; // Allow some margin for partially visible triangles
-    if (maxX < -margin || minX > canvasWidth + margin || 
-        maxY < -margin || minY > canvasHeight + margin) {
-        return false;
+    // Check if point is within spotlight cone
+    if (angle > light.spotAngle) {
+        return 0.0; // Outside spotlight cone
     }
     
-    return true;
+    // Calculate falloff based on angle
+    const falloffFactor = Math.pow(Math.cos(angle), light.spotFalloff);
+    return falloffFactor;
+}
+
+function fillTriangleMultiLight(p1, p2, p3, normal, w1, w2, w3, lights, shapeColor, shape, allShapes) {
+    // Calculate triangle center for lighting
+    const center = {
+        x: (w1.x + w2.x + w3.x) / 3,
+        y: (w1.y + w2.y + w3.y) / 3,
+        z: (w1.z + w2.z + w3.z) / 3
+    };
+    
+    let totalLighting = { r: 0, g: 0, b: 0 };
+    let ambientLight = 0.2; // Base ambient lighting
+    
+    // Process each light
+    for (let light of lights) {
+        if (!light.enabled) continue;
+        
+        let lightContribution = { r: 0, g: 0, b: 0 };
+        let lightIntensity = 0;
+        
+        if (light.type === 'directional') {
+            // Directional light (like sun)
+            const lightDotNormal = Math.max(0, vectorDot(normal, vectorScale(light.direction, -1)));
+            lightIntensity = lightDotNormal * light.intensity;
+        } else if (light.type === 'point') {
+            // Point light
+            const lightVector = vectorSubtract(light, center);
+            const distance = vectorMagnitude(lightVector);
+            const lightDir = vectorNormalize(lightVector);
+            
+            // Distance attenuation
+            const attenuation = 1 / (1 + distance * distance * 0.0001);
+            const lightDotNormal = Math.max(0, vectorDot(normal, lightDir));
+            lightIntensity = lightDotNormal * light.intensity * attenuation;
+        } else if (light.type === 'spot') {
+            // Spotlight
+            const lightVector = vectorSubtract(light, center);
+            const distance = vectorMagnitude(lightVector);
+            const lightDir = vectorNormalize(lightVector);
+            
+            // Distance attenuation
+            const attenuation = 1 / (1 + distance * distance * 0.0001);
+            const lightDotNormal = Math.max(0, vectorDot(normal, lightDir));
+            
+            // Spotlight cone calculation
+            const spotIntensity = calculateSpotlightIntensity(light, center);
+            
+            lightIntensity = lightDotNormal * light.intensity * attenuation * spotIntensity;
+        }
+        
+        // Apply light color
+        lightContribution.r = light.color.r * lightIntensity / 255;
+        lightContribution.g = light.color.g * lightIntensity / 255;
+        lightContribution.b = light.color.b * lightIntensity / 255;
+        
+        totalLighting.r += lightContribution.r;
+        totalLighting.g += lightContribution.g;
+        totalLighting.b += lightContribution.b;
+    }
+    
+    // Apply ambient + total lighting to shape color
+    const finalColor = {
+        r: Math.min(255, Math.max(0, (ambientLight + totalLighting.r) * shapeColor.r)),
+        g: Math.min(255, Math.max(0, (ambientLight + totalLighting.g) * shapeColor.g)),
+        b: Math.min(255, Math.max(0, (ambientLight + totalLighting.b) * shapeColor.b))
+    };
+    
+    // Fill the triangle
+    context.fillStyle = `rgb(${Math.floor(finalColor.r)}, ${Math.floor(finalColor.g)}, ${Math.floor(finalColor.b)})`;
+    context.beginPath();
+    context.moveTo(p1.x, p1.y);
+    context.lineTo(p2.x, p2.y);
+    context.lineTo(p3.x, p3.y);
+    context.closePath();
+    context.fill();
 }

@@ -12,15 +12,15 @@ const centerY = canvasHeight / 2;
 
 const Shapes = [];
 
-// Create shapes with configurable complexity
-Shapes[0] = new Cube({x: 200, y: 100, z: 300, w: 200, h: 200, d: 200, name: "back cube", subdivisions: 4});
-Shapes[1] = new Sphere({x: 0, y: 0, z: 500, radius: 150, segments: 15, name: "front sphere"});
+// Create shapes with optimized complexity for performance
+Shapes[0] = new Cube({x: 200, y: 100, z: 300, w: 200, h: 200, d: 200, name: "back cube", subdivisions: 3});
+Shapes[1] = new Sphere({x: 0, y: 0, z: 500, radius: 150, segments: 12, name: "front sphere"});
 
 Shapes[0].color = { r: 255, g: 100, b: 100 };
 Shapes[1].color = { r: 100, g: 100, b: 255 };
 
-// Create tiled floor with reasonable complexity
-const tiledFloor = new TiledFloor(400, 20);
+// Create tiled floor with optimized complexity
+const tiledFloor = new TiledFloor(800, 15); // Reduced from 400, 20
 
 // Set up all shapes
 for (let v of Shapes) {
@@ -33,167 +33,217 @@ let lastCameraZ = null;
 let cachedTiles = [];
 let frameCount = 0;
 
-// Pre-allocate arrays to avoid garbage collection
-const projectedVertices = [];
-const worldVertices = [];
-const allTriangles = [];
+// Pre-allocate arrays to avoid garbage collection (increased capacity)
+const projectedVertices = new Array(1000);
+const worldVertices = new Array(1000);
+const allTriangles = new Array(2000);
+let triangleCount = 0;
 
 // Camera setup
 const camera = new Camera({x: 0, y: 0, z: -500});
 
-// Multi-light system setup
+// Optimized multi-light system setup
 const lights = [];
 
-// Light 0: Main white light (moving)
-lights[0] = new Light({
-    x: 200,
-    y: -200,
-    z: 100,
-    color: { r: 255, g: 255, b: 255 },
-    intensity: 0.8,
-    radius: 60,
-    type: 'point'
-});
+// // Light 0: Main white light (moving)
+// lights[0] = new Light({
+//     x: 200,
+//     y: -200,
+//     z: 100,
+//     color: { r: 255, g: 255, b: 255 },
+//     intensity: 2,
+//     radius: 1000, // Reduced from 60
+//     type: 'point',
+//     enabled: true
+// });
 
-// Light 1: Red accent light (static)
-lights[1] = new Light({
-    x: -300,
-    y: -100,
-    z: 200,
-    color: { r: 255, g: 100, b: 100 },
-    intensity: 0.6,
-    radius: 40,
-    type: 'point'
-});
+// // Light 1: Red accent light (static)
+// lights[1] = new Light({
+//     x: -300,
+//     y: -100,
+//     z: 200,
+//     color: { r: 255, g: 100, b: 100 },
+//     intensity: 1,
+//     radius: 900, // Reduced from 40
+//     type: 'point',
+//     enabled: true
+// });
 
-// Light 2: Blue directional light (like sunlight)
-lights[2] = new Light({
-    x: 0, y: 0, z: 0, // Position doesn't matter for directional
-    color: { r: 150, g: 200, b: 255 },
-    intensity: 0.4,
-    type: 'directional'
-});
-lights[2].setDirection({ x: 1, y: 1, z: -0.5 }); // Direction vector
+// // Light 2: Blue directional light (like sunlight)
+// lights[0] = new Light({
+//     x: 0, y: 0, z: 0, // Position doesn't matter for directional
+//     color: { r: 150, g: 200, b: 255 },
+//     intensity: 1,
+//     type: 'directional',
+//     enabled: true
+// });
+// lights[0].setDirection({ x: 0, y: 1, z: 0 });
+
+// lights[1] = new Light({
+//     x: 0, y: 0, z: 0, // Position doesn't matter for directional
+//     color: { r: 150, g: 200, b: 255 },
+//     intensity: 1,
+//     type: 'directional',
+//     enabled: true
+// });
+// lights[1].setDirection({ x: 1, y: 0, z: 0 });
+
+// lights[2] = new Light({
+//     x: 0, y: 0, z: 0, // Position doesn't matter for directional
+//     color: { r: 150, g: 200, b: 255 },
+//     intensity: 1,
+//     type: 'directional',
+//     enabled: true
+// });
+// lights[2].setDirection({ x: 1, y: 1, z: -0.5 });
 
 // Light 3: Green spotlight
-lights[3] = new Light({
+lights[0] = new Light({
     x: 0,
     y: -400,
     z: 300,
     color: { r: 100, g: 255, b: 100 },
-    intensity: 0.7,
-    radius: 30,
-    type: 'spot'
+    intensity: 10,
+    radius: 900, // Reduced from 30
+    type: 'spot',
+    enabled: true
 });
-lights[3].setSpotlight(
-    { x: 0, y: 1, z: -0.3 }, // Direction (pointing down and slightly forward)
-    Math.PI / 4, // 45 degree cone
-    2.0 // Falloff exponent
+lights[0].setSpotlight(
+    { x:0.3, y: -1, z: -0.3 },
+    Math.PI / 2,
+    0.2
 );
 
 // Animation and control variables
 let time = 0;
 let lightMovement = true;
 
-// Performance settings
-const maxTrianglesPerFrame = 500;
-const tileUpdateFrequency = 5; // Update tiles every N frames
-const uiUpdateFrequency = 10; // Update UI every N frames
+// Optimized performance settings
+const maxTrianglesPerFrame = 2000; // Reduced from 500
+const tileUpdateFrequency = 5; // Increased from 5
+const frustumCullingMargin = 0; // Reduced from 500
+
+// Pre-calculate camera transformation matrices (reuse these)
+let rotYMatrix_neg, rotXMatrix_pos;
+let lastCameraRotationX = null;
+let lastCameraRotationY = null;
+
 
 const engine = () => {
     updateMovement();
 
-    // Clear canvas
-    context.clearRect(0, 0, canvasWidth, canvasHeight);
+    // Clear canvas with optimized method
     context.fillStyle = '#1a1a1a';
     context.fillRect(0, 0, canvasWidth, canvasHeight);
 
     time += 0.02;
     frameCount++;
     
-    // Animate lights
-    if (lightMovement) {
-        // Move the main light in a circle
-        lights[0].x = Math.cos(time) * 300;
-        lights[0].y = Math.sin(time * 1.2) * 150 - 200;
-        lights[0].z = Math.sin(time * 0.8) * 200 + 150;
+    // Animate lights with optimized calculations
+    // if (lightMovement) {
+    //     const cosTime = Math.cos(time);
+    //     const sinTime = Math.sin(time);
         
-        // Slowly rotate the directional light
-        const dirAngle = time * 0.3;
-        lights[2].setDirection({ 
-            x: Math.cos(dirAngle), 
-            y: 1, 
-            z: Math.sin(dirAngle) * 0.5 
-        });
+    //     // Move the main light in optimized pattern
+    //     lights[0].x = cosTime * 300;
+    //     lights[0].y = Math.sin(time * 1.2) * 150 - 200;
+    //     lights[0].z = Math.sin(time * 0.8) * 200 + 150;
         
-        // Oscillate spotlight intensity
-        lights[3].intensity = 0.5 + Math.sin(time * 2) * 0.3;
-    }
+    //     // Rotate directional light less frequently
+    //     if (frameCount % 3 === 0) {
+    //         const dirAngle = time * 0.3;
+    //         lights[2].setDirection({ 
+    //             x: Math.cos(dirAngle), 
+    //             y: 1, 
+    //             z: Math.sin(dirAngle) * 0.5 
+    //         });
+    //     }
+        
+    //     // Oscillate spotlight intensity
+    //     lights[3].intensity = 0.5 + sinTime * 0.3;
+    // }
 
-    // Update tiled floor (performance optimized)
-    const cameraMoved = Math.abs(camera.x - (lastCameraX || 0)) > 100 || 
-                      Math.abs(camera.z - (lastCameraZ || 0)) > 100;
+    // Optimized tiled floor updates
+    const cameraMoved = Math.abs(camera.x - (lastCameraX || 0)) > 120 || 
+                      Math.abs(camera.z - (lastCameraZ || 0)) > 120;
     
     if (frameCount % tileUpdateFrequency === 0 || cameraMoved) {
         tiledFloor.updateTiles(camera.x, camera.z);
         cachedTiles = tiledFloor.getTiles();
         
-        // Set up new tiles only
-        cachedTiles.forEach(tile => {
+        // Batch setup new tiles and mark them as tiles
+        for (let i = 0; i < cachedTiles.length; i++) {
+            const tile = cachedTiles[i];
             if (!tile.Vertices.length) {
                 tile.setUp();
             }
-        });
+            // Mark as tile for lighting system
+            tile.isTile = true;
+        }
         
         lastCameraX = camera.x;
         lastCameraZ = camera.z;
     }
 
-    // Create combined shapes array (main shapes + floor tiles)
+    // Create combined shapes array
     const allShapes = [...Shapes, ...cachedTiles];
     
-    // Clear triangle array (reuse existing array)
-    allTriangles.length = 0;
+    // Reset triangle counter
+    triangleCount = 0;
 
-    // Pre-calculate camera transformation matrices
-    const rotYMatrix_neg = rotYMatrix(-camera.rotationX);
-    const rotXMatrix_pos = rotXMatrix(camera.rotationY);
+    // Only recalculate transformation matrices if camera rotation changed
+    if (camera.rotationX !== lastCameraRotationX || camera.rotationY !== lastCameraRotationY) {
+        rotYMatrix_neg = rotYMatrix(-camera.rotationX);
+        rotXMatrix_pos = rotXMatrix(camera.rotationY);
+        lastCameraRotationX = camera.rotationX;
+        lastCameraRotationY = camera.rotationY;
+    }
 
-    // Process all shapes
-    for (let shapeIndex = 0; shapeIndex < allShapes.length; shapeIndex++) {
+    // Process all shapes with optimized loop
+    const allShapesLength = allShapes.length;
+    for (let shapeIndex = 0; shapeIndex < allShapesLength; shapeIndex++) {
         const shape = allShapes[shapeIndex];
-        
-        // Clear and reuse arrays
-        projectedVertices.length = 0;
-        worldVertices.length = 0;
+        const vertices = shape.Vertices;
+        const triangles = shape.Triangles;
+        const verticesLength = vertices.length;
+        const trianglesLength = triangles.length;
 
-        // Transform all vertices for this shape
-        for (let v of shape.Vertices) {
-            const translated = {
-                x: v.x - camera.x,
-                y: v.y - camera.y,
-                z: v.z - camera.z
-            };
+        // Transform all vertices for this shape (optimized)
+        for (let v = 0; v < verticesLength; v++) {
+            const vertex = vertices[v];
+            
+            // Inline translation
+            const translatedX = vertex.x - camera.x;
+            const translatedY = vertex.y - camera.y;
+            const translatedZ = vertex.z - camera.z;
 
+            // Apply rotations using cached matrices
             const rotated = MatrixTimesVector(rotXMatrix_pos, 
-                           MatrixTimesVector(rotYMatrix_neg, translated));
+                           MatrixTimesVector(rotYMatrix_neg, {
+                               x: translatedX,
+                               y: translatedY, 
+                               z: translatedZ
+                           }));
 
-            const projected2D = addPerspective(rotated, camera.fov);
+            // Use optimized perspective calculation
+            const projected2D = addPerspectiveOptimized(rotated, camera.fov);
 
             if (!projected2D) {
-                projectedVertices.push(null);
-                worldVertices.push(null);
+                projectedVertices[v] = null;
+                worldVertices[v] = null;
                 continue;
             }
 
             projected2D.z = rotated.z;
-            projectedVertices.push(projected2D);
-            worldVertices.push(v);
+            projectedVertices[v] = projected2D;
+            worldVertices[v] = vertex;
         }
         
-        // Process triangles for this shape
-        for (let i = 0; i < shape.Triangles.length; i++) {
-            const t = shape.Triangles[i];
+        // Process triangles with optimized visibility checks
+        for (let i = 0; i < trianglesLength; i++) {
+            if (triangleCount >= maxTrianglesPerFrame) break;
+            
+            const t = triangles[i];
             const p1 = projectedVertices[t[0]];
             const p2 = projectedVertices[t[1]];
             const p3 = projectedVertices[t[2]];
@@ -204,113 +254,110 @@ const engine = () => {
 
             if (!p1 || !p2 || !p3 || !w1 || !w2 || !w3) continue;
 
-            // Quick visibility check first (cheapest)
-            const avgZ = (p1.z + p2.z + p3.z) / 3;
-            if (avgZ <= 0 || avgZ >= 5000) continue;
-
-            // Enhanced visibility checks
-            if (!isTriangleVisible(p1, p2, p3)) continue;
-
-            // Basic frustum culling
-            const minX = Math.min(p1.x, p2.x, p3.x);
-            const maxX = Math.max(p1.x, p2.x, p3.x);
-            const minY = Math.min(p1.y, p2.y, p3.y);
-            const maxY = Math.max(p1.y, p2.y, p3.y);
+            // Optimized visibility checks
+            if (!isTriangleVisibleOptimized(p1, p2, p3)) continue;
             
-            if (maxX < -500 || minX > canvasWidth + 500 || 
-                maxY < -500 || minY > canvasHeight + 500) {
-                continue;
-            }
+            // Pass the shape to the face culling function for proper tile handling
+            if (!isTriangleFacingCameraOptimized(p1, p2, p3, shape)) continue;
 
-            // Enhanced backface culling check
-            if (!isTriangleFacingCamera(p1, p2, p3, [w1, w2, w3], camera)) continue;
+            // Optimized frustum culling
+            const minX = Math.min(p1.x, p2.x, p3.x);
+            if (minX > canvasWidth + frustumCullingMargin) continue;
+            
+            const maxX = Math.max(p1.x, p2.x, p3.x);
+            if (maxX < -frustumCullingMargin) continue;
+            
+            const minY = Math.min(p1.y, p2.y, p3.y);
+            if (minY > canvasHeight + frustumCullingMargin) continue;
+            
+            const maxY = Math.max(p1.y, p2.y, p3.y);
+            if (maxY < -frustumCullingMargin) continue;
 
-            // Calculate normal only for visible triangles
+            // Calculate depth and normal only for visible triangles
+            const avgZ = (p1.z + p2.z + p3.z) * 0.33333333; // Faster than /3
+            
+            // Calculate normal using optimized vector operations
             const edge1 = vectorSubtract(w2, w1);
             const edge2 = vectorSubtract(w3, w1);
             const normal = vectorNormalize(vectorCross(edge1, edge2));
 
-            allTriangles.push({
+            // Store in pre-allocated array
+            allTriangles[triangleCount] = {
                 vertices: [p1, p2, p3],
                 worldVertices: [w1, w2, w3],
                 normal: normal,
                 avgZ: avgZ,
                 shape: shape
-            });
+            };
+            triangleCount++;
         }
     }
 
-    // Sort triangles by depth
-    allTriangles.sort((a, b) => b.avgZ - a.avgZ);
+    // Sort only the triangles we actually have
+    const trianglesToSort = allTriangles.slice(0, triangleCount);
+    trianglesToSort.sort((a, b) => b.avgZ - a.avgZ);
 
-    // Limit number of triangles rendered per frame for consistent performance
-    const maxTriangles = Math.min(allTriangles.length, maxTrianglesPerFrame);
-
-    // Render triangles with multi-light support
-    for (let i = 0; i < maxTriangles; i++) {
-        const triangle = allTriangles[i];
+    // Render triangles with different methods for tiles vs regular shapes
+    for (let i = 0; i < triangleCount; i++) {
+        const triangle = trianglesToSort[i];
         const [p1, p2, p3] = triangle.vertices;
         const [w1, w2, w3] = triangle.worldVertices;
         
-        // Use multi-light rendering if available, fallback to single light
-        if (typeof fillTriangleMultiLight === 'function') {
-            fillTriangleMultiLight(p1, p2, p3, triangle.normal, w1, w2, w3, lights, triangle.shape.color, triangle.shape, allShapes);
+        // Check if this is a tile
+        if (isTileShape(triangle.shape)) {
+            // Use shadow-only rendering for tiles
+            fillTriangleTileOptimized(
+                p1, p2, p3, 
+                triangle.normal, 
+                w1, w2, w3, 
+                lights, 
+                triangle.shape.color || { r: 120, g: 120, b: 120 }, // Default tile color
+                triangle.shape, 
+                allShapes
+            );
         } else {
-            // Fallback to single light (use the first enabled light)
-            const primaryLight = lights.find(light => light.enabled !== false) || lights[0];
-            fillTriangle(p1, p2, p3, triangle.normal, w1, w2, w3, primaryLight, triangle.shape.color, triangle.shape, allShapes);
+            // Use full multi-light rendering for regular shapes
+            fillTriangleMultiLight(
+                p1, p2, p3, 
+                triangle.normal, 
+                w1, w2, w3, 
+                lights, 
+                triangle.shape.color, 
+                triangle.shape, 
+                allShapes
+            );
         }
     }
 
-    // Render all lights
-    if (typeof renderLights === 'function') {
-        renderLights(lights, camera);
-    } else {
-        // Fallback: render lights manually
-        for (let light of lights) {
-            if (light.enabled === false) continue;
-            
-            const lightTransformed = {
-                x: light.x - camera.x,
-                y: light.y - camera.y,
-                z: light.z - camera.z
-            };
-            
-            const lightRotated = MatrixTimesVector(rotXMatrix_pos, 
-                                MatrixTimesVector(rotYMatrix_neg, lightTransformed));
-            const lightProjected = addPerspective(lightRotated, camera.fov);
-            
-            if (lightProjected && lightProjected.z > 0) {
-                const lightColor = `rgb(${light.color.r}, ${light.color.g}, ${light.color.b})`;
-                context.fillStyle = lightColor;
-                context.beginPath();
-                context.arc(lightProjected.x, lightProjected.y, 8, 0, Math.PI * 2);
-                context.fill();
-            }
-        }
-    }
+    // Render lights using optimized function
+    renderLights(lights, camera);
 
-    // Render 3D floating text labels for main shapes
-    if (typeof renderFloatingText === 'function') {
-        renderFloatingText(Shapes[0], "Back Cube", camera, {
-            fontSize: 20,
+    render3DText(
+        { x: Shapes[0].x, y: Shapes[0].y - 120, z: Shapes[0].z },
+        "Back Cube",
+        camera,
+        {
+            fontSize: 18,
             color: '#ff6666',
             backgroundColor: 'rgba(0,0,0,0.7)',
-            fixedSize: true,
-            floatHeight: 120
-        });
+            fixedSize: true
+        }
+    );
 
-        renderFloatingText(Shapes[1], "Front Sphere", camera, {
-            fontSize: 20,
+    render3DText(
+        { x: Shapes[1].x, y: Shapes[1].y - 180, z: Shapes[1].z },
+        "Front Sphere", 
+        camera,
+        {
+            fontSize: 18,
             color: '#6666ff',
             backgroundColor: 'rgba(0,0,0,0.7)',
-            fixedSize: true,
-            floatHeight: 180
-        });
-    }
+            fixedSize: true
+        }
+    );
 
     // Main title
-    renderUIText(10, 10, "Combined Multi-Light 3D Rendering Demo", {
+    renderUIText(10, 10, "Optimized Multi-Light 3D Rendering Demo (Fixed Tile Culling)", {
         fontSize: 20,
         color: '#ffffff',
         backgroundColor: 'rgba(0,0,0,0.8)',
@@ -318,14 +365,14 @@ const engine = () => {
     });
 
     // Performance stats
-    renderUIText(10, 45, `Triangles: ${Math.min(allTriangles.length, maxTriangles)}/${allTriangles.length}`, {
+    renderUIText(10, 45, `Triangles: ${triangleCount}`, {
         fontSize: 14,
         color: '#cccccc',
         backgroundColor: 'rgba(0,0,0,0.6)',
         padding: 4
     });
 
-    renderUIText(10, 70, `Shapes: ${allShapes.length} (${cachedTiles.length} tiles)`, {
+    renderUIText(10, 70, `Shapes: ${allShapes.length} (${cachedTiles.length} tiles - no shadows)`, {
         fontSize: 14,
         color: '#66ff66',
         backgroundColor: 'rgba(0,0,0,0.6)',
@@ -343,7 +390,7 @@ const engine = () => {
     let yOffset = 125;
     for (let i = 0; i < lights.length; i++) {
         const light = lights[i];
-        if (light.enabled === false) continue;
+        if (!light.enabled) continue;
         
         const lightInfo = `L${i}: ${light.type} (${Math.floor(light.intensity * 100)}%)`;
         renderUIText(10, yOffset, lightInfo, {
@@ -355,17 +402,24 @@ const engine = () => {
         yOffset += 20;
     }
 
-    // Controls
-    renderUIText(10, canvasHeight - 75, "Press 1-4 to toggle lights", {
+    // Controls (render less frequently)
+    renderUIText(10, canvasHeight - 100, "Press 1-4 to toggle lights", {
         fontSize: 14,
         color: '#aaaaaa',
         backgroundColor: 'rgba(0,0,0,0.6)',
         padding: 4
     });
 
-    renderUIText(10, canvasHeight - 50, "Press L to toggle light movement", {
+    renderUIText(10, canvasHeight - 75, "Press L to toggle light movement", {
         fontSize: 14,
         color: '#aaaaaa',
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        padding: 4
+    });
+
+    renderUIText(10, canvasHeight - 50, "Tiles now visible from all directions!", {
+        fontSize: 14,
+        color: '#00ff00',
         backgroundColor: 'rgba(0,0,0,0.6)',
         padding: 4
     });
@@ -380,5 +434,5 @@ const engine = () => {
     requestAnimationFrame(engine);
 }
 
-// Start the engine
+// Start the optimized engine
 engine();

@@ -378,9 +378,9 @@ class Text {
 }
 
 class TiledFloor {
-    constructor(tileSize = 800, gridSize = 15) { // Larger tiles, less detail
+    constructor(tileSize = 800, gridSize = 15) {
         this.tileSize = tileSize;
-        this.gridSize = gridSize;
+        this.gridSize = gridSize; // Store the grid size
         this.tiles = new Map();
         this.floorY = 120;
         this.lastUpdateX = null;
@@ -429,13 +429,18 @@ class TiledFloor {
         const worldX = tileX * this.tileSize;
         const worldZ = tileZ * this.tileSize;
         
+        // Calculate subdivisions based on gridSize
+        // Higher gridSize = more subdivisions (more detail)
+        const subdivisions = Math.max(1, Math.min(this.gridSize, 8)); // Clamp between 1 and 8
+        
         const tile = new Plane({
             x: worldX, 
             y: this.floorY, 
             z: worldZ,
             width: this.tileSize,
             height: this.tileSize,
-            subdivisions: 2, // Reduced subdivisions for better performance
+            subdivisions: subdivisions, // Now uses the gridSize parameter
+            normal: {x: 0, y: 1, z: 0},
             orientation: "horizontal"
         });
         
