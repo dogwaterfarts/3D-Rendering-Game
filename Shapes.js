@@ -378,13 +378,14 @@ class Text {
 }
 
 class TiledFloor {
-    constructor(tileSize = 800, gridSize = 15) {
+    constructor(tileSize = 800, gridSize = 15, color = {r: 70, g: 200, b: 90}) {
         this.tileSize = tileSize;
         this.gridSize = gridSize; // Store the grid size
         this.tiles = new Map();
         this.floorY = 120;
         this.lastUpdateX = null;
         this.lastUpdateZ = null;
+        this.color = color;
     }
     
     updateTiles(cameraX, cameraZ) {
@@ -446,11 +447,7 @@ class TiledFloor {
         
         // Set a subtle floor color variation
         const variation = Math.sin(tileX * 0.1) * Math.cos(tileZ * 0.1) * 20;
-        tile.color = { 
-            r: 80 + variation, 
-            g: 120 + variation, 
-            b: 160 + variation 
-        };
+        tile.color = this.color;
         
         return tile;
     }

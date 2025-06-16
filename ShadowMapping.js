@@ -1,217 +1,121 @@
-// ===== OPTIMIZED SHADOW MAPPING FUNCTIONS =====
-// This file is now optimized to work with ExtraFunctions.js
-// Most shadow calculations are now handled in the optimized functions
+// ===== SIMPLIFIED SHADOW MAPPING =====
+// This file now contains minimal shadow functionality for backward compatibility
+// Most complex shadow calculations have been removed for better performance
 
-// Legacy compatibility function - kept for backward compatibility
-// The actual optimized implementation is in ExtraFunctions.js as rayTriangleIntersectionOptimized
-function rayTriangleIntersection(rayOrigin, rayDirection, v0, v1, v2) {
-    // Redirect to optimized version and format output for compatibility
-    const distance = rayTriangleIntersectionOptimized(rayOrigin, rayDirection, v0, v1, v2);
-    
-    if (distance === null || distance <= 0) {
-        return null;
-    }
-    
-    return {
-        distance: distance,
-        point: {
-            x: rayOrigin.x + rayDirection.x * distance,
-            y: rayOrigin.y + rayDirection.y * distance,
-            z: rayOrigin.z + rayDirection.z * distance
-        }
-    };
-}
-
-// Legacy shadow function - now redirects to optimized versions
+// Simple shadow check - returns basic shadow/no shadow result
 function isPointInShadow(worldPoint, light, allShapes, excludeShape = null) {
-    if (!worldPoint || !light) return false;
-    
-    // Handle different light formats for backward compatibility
-    let lightPos;
-    if (light.x !== undefined) {
-        lightPos = { x: light.x, y: light.y, z: light.z };
-    } else {
-        lightPos = light;
-    }
-    
-    // Create a simple surface normal approximation (pointing up)
-    const surfaceNormal = { x: 0, y: -1, z: 0 };
-    
-    // Use optimized shadow calculation
-    return isPointInShadowOptimized(worldPoint, surfaceNormal, lightPos.x, lightPos.y, lightPos.z, allShapes, excludeShape);
+    // Simplified: no complex shadow calculations
+    // You can implement basic shadow logic here if needed
+    return false; // Always no shadow for maximum performance
 }
 
-// Enhanced shadow function with proper surface normal support
+// Simple shadow with normal (for compatibility)
 function isPointInShadowWithNormal(worldPoint, surfaceNormal, light, allShapes, excludeShape = null) {
-    if (!worldPoint || !light || !surfaceNormal) return false;
-    
-    // Handle different light formats
-    let lightPos;
-    if (light.x !== undefined) {
-        lightPos = { x: light.x, y: light.y, z: light.z };
-    } else {
-        lightPos = light;
-    }
-    
-    // Use optimized shadow calculation with proper normal
-    return isPointInShadowOptimized(worldPoint, surfaceNormal, lightPos.x, lightPos.y, lightPos.z, allShapes, excludeShape);
+    return false; // No shadows for simplicity
 }
 
-// Updated calculateShadowIntensity function that works with the optimized system
+// Basic shadow intensity (always returns full lighting)
 function calculateShadowIntensity(worldPoint, light, allShapes, excludeShape = null, surfaceNormal = null) {
-    if (!worldPoint || !light) return 1.0;
-    
-    // Handle different light types using the optimized functions
-    let lightObj;
-    if (light.type !== undefined) {
-        lightObj = light;
-    } else {
-        // Convert legacy light format
-        lightObj = {
-            x: light.x || 0,
-            y: light.y || 0,
-            z: light.z || 0,
-            type: 'point',
-            intensity: light.intensity || 1.0,
-            color: light.color || { r: 255, g: 255, b: 255 }
-        };
-    }
-    
-    // Use the optimized shadow intensity calculation
-    return calculateShadowIntensityOptimized(worldPoint, lightObj, allShapes, excludeShape, surfaceNormal);
+    return 1.0; // Always full lighting
 }
 
-// Fast shadow check for multiple lights - optimized for performance
+// Multi-light shadows (simplified to return no shadows)
 function calculateMultiLightShadows(worldPoint, surfaceNormal, lights, allShapes, excludeShape = null) {
     const shadowResults = new Array(lights.length);
-    
-    for (let i = 0; i < lights.length; i++) {
-        const light = lights[i];
-        if (!light.enabled) {
-            shadowResults[i] = 0.0; // Fully shadowed if light disabled
-            continue;
-        }
-        
-        // Use optimized shadow calculation
-        shadowResults[i] = calculateShadowIntensityOptimized(worldPoint, light, allShapes, excludeShape, surfaceNormal);
-    }
-    
+    shadowResults.fill(1.0); // No shadows for any light
     return shadowResults;
 }
 
-// Optimized shadow casting for directional lights specifically
+// Directional shadow (disabled)
 function isPointInDirectionalShadow(worldPoint, surfaceNormal, lightDirection, allShapes, excludeShape = null) {
-    if (!worldPoint || !lightDirection || !surfaceNormal) return false;
-    
-    // Normalize the light direction
-    const length = Math.sqrt(lightDirection.x * lightDirection.x + 
-                           lightDirection.y * lightDirection.y + 
-                           lightDirection.z * lightDirection.z);
-    
-    if (length === 0) return false;
-    
-    const normalizedDir = {
-        x: -lightDirection.x / length, // Negate because we want direction TO light
-        y: -lightDirection.y / length,
-        z: -lightDirection.z / length
-    };
-    
-    // Offset ray origin along surface normal
-    const rayOrigin = {
-        x: worldPoint.x + surfaceNormal.x * 0.1,
-        y: worldPoint.y + surfaceNormal.y * 0.1,
-        z: worldPoint.z + surfaceNormal.z * 0.1
-    };
-    
-    // Use optimized directional shadow test
-    return isPointInShadowDirectionalOptimized(rayOrigin, normalizedDir, allShapes, excludeShape);
+    return false;
 }
 
-// Batch shadow processing for multiple points (useful for performance)
+// Batch shadow processing (simplified)
 function calculateBatchShadows(worldPoints, surfaceNormals, lights, allShapes, excludeShapes = null) {
     const results = new Array(worldPoints.length);
     
     for (let p = 0; p < worldPoints.length; p++) {
-        const worldPoint = worldPoints[p];
-        const surfaceNormal = surfaceNormals[p];
-        const excludeShape = excludeShapes ? excludeShapes[p] : null;
-        
-        results[p] = calculateMultiLightShadows(worldPoint, surfaceNormal, lights, allShapes, excludeShape);
+        results[p] = new Array(lights.length).fill(1.0); // No shadows
     }
     
     return results;
 }
 
-// Utility function for shadow debugging
-function debugShadowRay(worldPoint, surfaceNormal, light, allShapes, excludeShape = null) {
-    if (!worldPoint || !light || !surfaceNormal) return null;
+// Optional: Simple ray-triangle intersection for basic use cases
+function rayTriangleIntersection(rayOrigin, rayDirection, v0, v1, v2) {
+    // Basic implementation - can be used for simple collision detection
+    const EPSILON = 0.0000001;
     
-    const lightDirection = {
-        x: light.x - worldPoint.x,
-        y: light.y - worldPoint.y,
-        z: light.z - worldPoint.z
+    const edge1 = {
+        x: v1.x - v0.x,
+        y: v1.y - v0.y,
+        z: v1.z - v0.z
     };
     
-    const distance = Math.sqrt(lightDirection.x * lightDirection.x + 
-                              lightDirection.y * lightDirection.y + 
-                              lightDirection.z * lightDirection.z);
-    
-    if (distance === 0) return null;
-    
-    const normalizedDir = {
-        x: lightDirection.x / distance,
-        y: lightDirection.y / distance,
-        z: lightDirection.z / distance
+    const edge2 = {
+        x: v2.x - v0.x,
+        y: v2.y - v0.y,
+        z: v2.z - v0.z
     };
     
-    const rayOrigin = {
-        x: worldPoint.x + surfaceNormal.x * 0.1,
-        y: worldPoint.y + surfaceNormal.y * 0.1,
-        z: worldPoint.z + surfaceNormal.z * 0.1
+    // Cross product
+    const h = {
+        x: rayDirection.y * edge2.z - rayDirection.z * edge2.y,
+        y: rayDirection.z * edge2.x - rayDirection.x * edge2.z,
+        z: rayDirection.x * edge2.y - rayDirection.y * edge2.x
     };
     
-    // Find first intersection
-    for (let shape of allShapes) {
-        if (shape === excludeShape) continue;
-        
-        for (let triangleIndices of shape.Triangles) {
-            if (!triangleIndices || triangleIndices.length < 3) continue;
-            
-            const v0 = shape.Vertices[triangleIndices[0]];
-            const v1 = shape.Vertices[triangleIndices[1]];
-            const v2 = shape.Vertices[triangleIndices[2]];
-            
-            if (!v0 || !v1 || !v2) continue;
-            
-            const intersectionDist = rayTriangleIntersectionOptimized(rayOrigin, normalizedDir, v0, v1, v2);
-            
-            if (intersectionDist && intersectionDist < distance - 0.1) {
-                return {
-                    inShadow: true,
-                    rayOrigin: rayOrigin,
-                    rayDirection: normalizedDir,
-                    lightDistance: distance,
-                    intersectionDistance: intersectionDist,
-                    intersectionPoint: {
-                        x: rayOrigin.x + normalizedDir.x * intersectionDist,
-                        y: rayOrigin.y + normalizedDir.y * intersectionDist,
-                        z: rayOrigin.z + normalizedDir.z * intersectionDist
-                    },
-                    blockingShape: shape
-                };
-            }
-        }
+    const a = edge1.x * h.x + edge1.y * h.y + edge1.z * h.z;
+    
+    if (a > -EPSILON && a < EPSILON) {
+        return null; // Ray is parallel
     }
     
+    const f = 1.0 / a;
+    const s = {
+        x: rayOrigin.x - v0.x,
+        y: rayOrigin.y - v0.y,
+        z: rayOrigin.z - v0.z
+    };
+    
+    const u = f * (s.x * h.x + s.y * h.y + s.z * h.z);
+    if (u < 0.0 || u > 1.0) return null;
+    
+    const q = {
+        x: s.y * edge1.z - s.z * edge1.y,
+        y: s.z * edge1.x - s.x * edge1.z,
+        z: s.x * edge1.y - s.y * edge1.x
+    };
+    
+    const v = f * (rayDirection.x * q.x + rayDirection.y * q.y + rayDirection.z * q.z);
+    if (v < 0.0 || u + v > 1.0) return null;
+    
+    const t = f * (edge2.x * q.x + edge2.y * q.y + edge2.z * q.z);
+    
+    if (t > EPSILON) {
+        return {
+            distance: t,
+            point: {
+                x: rayOrigin.x + rayDirection.x * t,
+                y: rayOrigin.y + rayDirection.y * t,
+                z: rayOrigin.z + rayDirection.z * t
+            }
+        };
+    }
+    
+    return null;
+}
+
+// Debug function (simplified)
+function debugShadowRay(worldPoint, surfaceNormal, light, allShapes, excludeShape = null) {
     return {
         inShadow: false,
-        rayOrigin: rayOrigin,
-        rayDirection: normalizedDir,
-        lightDistance: distance
+        message: "Shadow system simplified - no complex shadows calculated"
     };
 }
 
-// Performance monitoring for shadow calculations
+// Performance stats (placeholder)
 let shadowCalculationStats = {
     totalShadowTests: 0,
     shadowHits: 0,
@@ -220,11 +124,11 @@ let shadowCalculationStats = {
 };
 
 function getShadowPerformanceStats() {
-    const elapsed = Date.now() - shadowCalculationStats.lastResetTime;
     return {
         ...shadowCalculationStats,
-        testsPerSecond: shadowCalculationStats.totalShadowTests / (elapsed / 1000),
-        hitRate: shadowCalculationStats.shadowHits / shadowCalculationStats.totalShadowTests
+        testsPerSecond: 0,
+        hitRate: 0,
+        message: "Shadow system simplified - performance stats disabled"
     };
 }
 
@@ -237,7 +141,7 @@ function resetShadowPerformanceStats() {
     };
 }
 
-// Export functions for use in other modules
+// Export functions for compatibility
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         rayTriangleIntersection,

@@ -14,7 +14,7 @@ const Shapes = [];
 
 // Create shapes with optimized complexity for performance
 Shapes[0] = new Cube({x: 200, y: 100, z: 300, w: 200, h: 200, d: 200, name: "back cube", subdivisions: 3});
-Shapes[1] = new Sphere({x: 0, y: 0, z: 500, radius: 150, segments: 12, name: "front sphere"});
+Shapes[1] = new Sphere({x: 0, y: 0, z: 500, radius: 150, segments: 30, name: "front sphere"});
 
 Shapes[0].color = { r: 255, g: 100, b: 100 };
 Shapes[1].color = { r: 100, g: 100, b: 255 };
@@ -42,92 +42,66 @@ let triangleCount = 0;
 // Camera setup
 const camera = new Camera({x: 0, y: 0, z: -500});
 
-// Optimized multi-light system setup
+// POINT LIGHTS ONLY - Multiple light sources
 const lights = [];
 
-// // Light 0: Main white light (moving)
-// lights[0] = new Light({
-//     x: 200,
-//     y: -200,
-//     z: 100,
-//     color: { r: 255, g: 255, b: 255 },
-//     intensity: 2,
-//     radius: 1000, // Reduced from 60
-//     type: 'point',
-//     enabled: true
-// });
-
-// // Light 1: Red accent light (static)
-// lights[1] = new Light({
-//     x: -300,
-//     y: -100,
-//     z: 200,
-//     color: { r: 255, g: 100, b: 100 },
-//     intensity: 1,
-//     radius: 900, // Reduced from 40
-//     type: 'point',
-//     enabled: true
-// });
-
-// // Light 2: Blue directional light (like sunlight)
-// lights[0] = new Light({
-//     x: 0, y: 0, z: 0, // Position doesn't matter for directional
-//     color: { r: 150, g: 200, b: 255 },
-//     intensity: 1,
-//     type: 'directional',
-//     enabled: true
-// });
-// lights[0].setDirection({ x: 0, y: 1, z: 0 });
-
-// lights[1] = new Light({
-//     x: 0, y: 0, z: 0, // Position doesn't matter for directional
-//     color: { r: 150, g: 200, b: 255 },
-//     intensity: 1,
-//     type: 'directional',
-//     enabled: true
-// });
-// lights[1].setDirection({ x: 1, y: 0, z: 0 });
-
-// lights[2] = new Light({
-//     x: 0, y: 0, z: 0, // Position doesn't matter for directional
-//     color: { r: 150, g: 200, b: 255 },
-//     intensity: 1,
-//     type: 'directional',
-//     enabled: true
-// });
-// lights[2].setDirection({ x: 1, y: 1, z: -0.5 });
-
-// Light 3: Green spotlight
+// Light 0: Main white point light (moving)
 lights[0] = new Light({
-    x: 0,
-    y: -400,
-    z: 300,
-    color: { r: 100, g: 255, b: 100 },
-    intensity: 10,
-    radius: 900, // Reduced from 30
-    type: 'spot',
+    x: 200,
+    y: -200,
+    z: 100,
+    color: { r: 255, g: 255, b: 255 },
+    intensity: 15,
+    type: 'point',
     enabled: true
 });
-lights[0].setSpotlight(
-    { x:0.3, y: -1, z: -0.3 },
-    Math.PI / 2,
-    0.2
-);
+
+// Light 1: Red accent point light (static)
+lights[1] = new Light({
+    x: -300,
+    y: -100,
+    z: 200,
+    color: { r: 255, g: 100, b: 100 },
+    intensity: 1.2,
+    type: 'point',
+    enabled: true
+});
+
+// Light 2: Blue point light (oscillating)
+lights[2] = new Light({
+    x: 100,
+    y: -300,
+    z: 400,
+    color: { r: 100, g: 150, b: 255 },
+    intensity: 1.0,
+    type: 'point',
+    enabled: true
+});
+
+// Light 3: Green point light (rotating)
+lights[3] = new Light({
+    x: 0,
+    y: -150,
+    z: 200,
+    color: { r: 100, g: 255, b: 100 },
+    intensity: 0.8,
+    type: 'point',
+    enabled: true
+});
 
 // Animation and control variables
 let time = 0;
 let lightMovement = true;
 
 // Optimized performance settings
-const maxTrianglesPerFrame = 2000; // Reduced from 500
-const tileUpdateFrequency = 5; // Increased from 5
-const frustumCullingMargin = 0; // Reduced from 500
+const maxTrianglesPerFrame = 10000;
+const tileUpdateFrequency = 5;
+const frustumCullingMargin = 0;
 
 // Pre-calculate camera transformation matrices (reuse these)
 let rotYMatrix_neg, rotXMatrix_pos;
 let lastCameraRotationX = null;
 let lastCameraRotationY = null;
-
 
 const engine = () => {
     updateMovement();
@@ -139,29 +113,31 @@ const engine = () => {
     time += 0.02;
     frameCount++;
     
-    // Animate lights with optimized calculations
-    // if (lightMovement) {
-    //     const cosTime = Math.cos(time);
-    //     const sinTime = Math.sin(time);
+    // Animate point lights with different patterns
+    if (lightMovement) {
+        const cosTime = Math.cos(time);
+        const sinTime = Math.sin(time);
         
-    //     // Move the main light in optimized pattern
-    //     lights[0].x = cosTime * 300;
-    //     lights[0].y = Math.sin(time * 1.2) * 150 - 200;
-    //     lights[0].z = Math.sin(time * 0.8) * 200 + 150;
+        // Light 0: Circular motion
+        lights[0].x = cosTime * 300;
+        lights[0].y = Math.sin(time * 1.2) * 150 - 200;
+        lights[0].z = Math.sin(time * 0.8) * 200 + 150;
         
-    //     // Rotate directional light less frequently
-    //     if (frameCount % 3 === 0) {
-    //         const dirAngle = time * 0.3;
-    //         lights[2].setDirection({ 
-    //             x: Math.cos(dirAngle), 
-    //             y: 1, 
-    //             z: Math.sin(dirAngle) * 0.5 
-    //         });
-    //     }
+        // Light 1: Static (no movement)
+        // lights[1] stays in place
         
-    //     // Oscillate spotlight intensity
-    //     lights[3].intensity = 0.5 + sinTime * 0.3;
-    // }
+        // Light 2: Vertical oscillation
+        lights[2].y = -300 + Math.sin(time * 2) * 100;
+        
+        // Light 3: Horizontal rotation around origin
+        lights[3].x = Math.cos(time * 0.5) * 250;
+        lights[3].z = Math.sin(time * 0.5) * 250 + 200;
+        
+        // Vary light intensities over time
+        lights[0].intensity = 1.0 + sinTime * 0.5;
+        lights[2].intensity = 0.8 + cosTime * 0.4;
+        lights[3].intensity = 0.6 + Math.sin(time * 1.5) * 0.3;
+    }
 
     // Optimized tiled floor updates
     const cameraMoved = Math.abs(camera.x - (lastCameraX || 0)) > 120 || 
@@ -297,42 +273,29 @@ const engine = () => {
     const trianglesToSort = allTriangles.slice(0, triangleCount);
     trianglesToSort.sort((a, b) => b.avgZ - a.avgZ);
 
-    // Render triangles with different methods for tiles vs regular shapes
+    // Render triangles with point lighting only
     for (let i = 0; i < triangleCount; i++) {
         const triangle = trianglesToSort[i];
         const [p1, p2, p3] = triangle.vertices;
         const [w1, w2, w3] = triangle.worldVertices;
         
-        // Check if this is a tile
-        if (isTileShape(triangle.shape)) {
-            // Use shadow-only rendering for tiles
-            fillTriangleTileOptimized(
-                p1, p2, p3, 
-                triangle.normal, 
-                w1, w2, w3, 
-                lights, 
-                triangle.shape.color || { r: 120, g: 120, b: 120 }, // Default tile color
-                triangle.shape, 
-                allShapes
-            );
-        } else {
-            // Use full multi-light rendering for regular shapes
-            fillTriangleMultiLight(
-                p1, p2, p3, 
-                triangle.normal, 
-                w1, w2, w3, 
-                lights, 
-                triangle.shape.color, 
-                triangle.shape, 
-                allShapes
-            );
-        }
+        // Use simplified multi-point light rendering for all objects
+        fillTriangleMultiLightOptimized(
+            p1, p2, p3, 
+            triangle.normal, 
+            w1, w2, w3, 
+            lights, // All lights are point lights
+            triangle.shape.color, 
+            triangle.shape, 
+            allShapes
+        );
     }
 
-    // Render lights using optimized function
+    // Render point lights using optimized function
     renderLights(lights, camera);
 
-    render3DText(
+    // Render 3D text labels
+    render3DTextSimple(
         { x: Shapes[0].x, y: Shapes[0].y - 120, z: Shapes[0].z },
         "Back Cube",
         camera,
@@ -344,7 +307,7 @@ const engine = () => {
         }
     );
 
-    render3DText(
+    render3DTextSimple(
         { x: Shapes[1].x, y: Shapes[1].y - 180, z: Shapes[1].z },
         "Front Sphere", 
         camera,
@@ -356,44 +319,45 @@ const engine = () => {
         }
     );
 
-    // Main title
-    renderUIText(10, 10, "Optimized Multi-Light 3D Rendering Demo (Fixed Tile Culling)", {
+    // UI Information
+    renderUITextSimple(10, 10, "Simplified Multi-Point Light 3D Rendering", {
         fontSize: 20,
         color: '#ffffff',
         backgroundColor: 'rgba(0,0,0,0.8)',
         padding: 8
     });
 
-    // Performance stats
-    renderUIText(10, 45, `Triangles: ${triangleCount}`, {
+    renderUITextSimple(10, 45, `Triangles: ${triangleCount}`, {
         fontSize: 14,
         color: '#cccccc',
         backgroundColor: 'rgba(0,0,0,0.6)',
         padding: 4
     });
 
-    renderUIText(10, 70, `Shapes: ${allShapes.length} (${cachedTiles.length} tiles - no shadows)`, {
+    renderUITextSimple(10, 70, `Shapes: ${allShapes.length} (${cachedTiles.length} tiles)`, {
         fontSize: 14,
         color: '#66ff66',
         backgroundColor: 'rgba(0,0,0,0.6)',
         padding: 4
     });
 
-    renderUIText(10, 95, `Camera: (${Math.floor(camera.x)}, ${Math.floor(camera.y)}, ${Math.floor(camera.z)})`, {
+    renderUITextSimple(10, 95, `Camera: (${Math.floor(camera.x)}, ${Math.floor(camera.y)}, ${Math.floor(camera.z)})`, {
         fontSize: 14,
         color: '#cccccc',
         backgroundColor: 'rgba(0,0,0,0.6)',
         padding: 4
     });
 
-    // Display light information
+    // Display active point lights information
     let yOffset = 125;
+    let activePointLights = 0;
     for (let i = 0; i < lights.length; i++) {
         const light = lights[i];
-        if (!light.enabled) continue;
+        if (!light.enabled || light.type !== 'point') continue;
         
-        const lightInfo = `L${i}: ${light.type} (${Math.floor(light.intensity * 100)}%)`;
-        renderUIText(10, yOffset, lightInfo, {
+        activePointLights++;
+        const lightInfo = `Point Light ${i}: Intensity ${Math.floor(light.intensity * 100)}%`;
+        renderUITextSimple(10, yOffset, lightInfo, {
             fontSize: 12,
             color: `rgb(${light.color.r}, ${light.color.g}, ${light.color.b})`,
             backgroundColor: 'rgba(0,0,0,0.6)',
@@ -402,29 +366,36 @@ const engine = () => {
         yOffset += 20;
     }
 
+    renderUITextSimple(10, yOffset + 10, `Active Point Lights: ${activePointLights}`, {
+        fontSize: 14,
+        color: '#ffff66',
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        padding: 4
+    });
+
     // Controls (render less frequently)
-    renderUIText(10, canvasHeight - 100, "Press 1-4 to toggle lights", {
+    renderUITextSimple(10, canvasHeight - 100, "Press 1-4 to toggle lights", {
         fontSize: 14,
         color: '#aaaaaa',
         backgroundColor: 'rgba(0,0,0,0.6)',
         padding: 4
     });
 
-    renderUIText(10, canvasHeight - 75, "Press L to toggle light movement", {
+    renderUITextSimple(10, canvasHeight - 75, "Press L to toggle light movement", {
         fontSize: 14,
         color: '#aaaaaa',
         backgroundColor: 'rgba(0,0,0,0.6)',
         padding: 4
     });
 
-    renderUIText(10, canvasHeight - 50, "Tiles now visible from all directions!", {
+    renderUITextSimple(10, canvasHeight - 50, "Tiles now visible from all directions!", {
         fontSize: 14,
         color: '#00ff00',
         backgroundColor: 'rgba(0,0,0,0.6)',
         padding: 4
     });
 
-    renderUIText(10, canvasHeight - 25, "Use WASD to move, Mouse to look around", {
+    renderUITextSimple(10, canvasHeight - 25, "Use WASD to move, Mouse to look around", {
         fontSize: 14,
         color: '#aaaaaa',
         backgroundColor: 'rgba(0,0,0,0.6)',

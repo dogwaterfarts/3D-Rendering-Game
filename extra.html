@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simplified 3D Lighting</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: black;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            cursor: crosshair;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="c"></canvas>
+    
+    <script>
+        // Basic 3D Math Functions
+        class Vertex {
+            constructor(x, y, z) {
+                this.x = x;
+                this.y = y;
+                this.z = z;
+            }
+        }
+
+        function vectorSubtract(v1, v2) {
+            return { x: v1.x - v2.x, y: v1.y - v2.y, z: v1.z - v2.z };
+        }
+
+        function vectorCross(v1, v2) {
+            return {
+                x: v1.y * v2.z - v1.z * v2.y,
+                y: v1.z * v2.x - v1.x * v2.z,
+                z: v1.x * v2.y - v1.y * v2.x
+            };
+        }
+
+        function vectorDot(v1, v2) {
+            return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
+        }
+
+        function vectorNormalize(v) {
+            const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+            if (length === 0) return { x: 0, y: 0, z: 0 };
+            return { x: v.x / length, y: v.y / length, z: v.z / length };
+        }
+
+        function MatrixTimesVector(matrix, vector) {
+            return {
+                x: matrix[0][0] * vector.x + matrix[0][1] * vector.y + matrix[0][2] * vector.z,
+                y: matrix[1][0] * vector.x + matrix[1][1] * vector.y + matrix[1][2] * vector.z,
+                z: matrix[2][0] * vector.x + matrix[2][1] * vector.y + matrix[2][2] * vector.z
+            };
+        }
+
+        function rotXMatrix(angle) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            return [
+                [1, 0, 0],
+                [0, cos, -sin],
+                [0, sin, cos]
+            ];
+        }
+
+        function rotYMatrix(angle) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            return [
+                [cos, 0, sin],
+                [0, 1, 0],
+                [-sin, 0, cos]
+            ];
+        }
+
+        // Camera Class
+        class Camera {
+            constructor(options = {}) {
+                this.x = options.x || 0;
+                this.y = options.y || 0;
+                this.z = options.z || -500;
+                this.rotationX = 0;
+                this.rotationY = 0;
+                this.fov = 800;
+            }
+        }
+
+        // Simple Light Class
+        class Light {
+            constructor(options = {}) {
+                this.x = options.x || 0;
+                this.y = options.y || 0;
+                this.z = options.z || 0;
+                this.intensity = options.intensity || 1;
+            }
+        }
+
+        // Cube Class
+        class Cube {
+            constructor(options = {}) {
+                this.x = options.x || 0;
+                this.y = options.y || 0;
+                this.z = options.z || 0;
+                this.w = options.w || 100;
+                this.h = options.h || 100;
+                this.d = options.d || 100;
+                this.name = options.name || "cube";
+                this.color = options.color || { r: 100, g: 150, b: 200 };
+                this.Vertices = [];
+                this.Triangles = [];
+            }
+
+            setUp() {
+                const hw = this.w / 2;
+                const hh = this.h / 2;
+                const hd = this.d / 2;
+
+                this.Vertices = [
+                    new Vertex(this.x - hw, this.y - hh, this.z - hd), // 0
+                    new Vertex(this.x + hw, this.y - hh, this.z - hd), // 1
+                    new Vertex(this.x + hw, this.y + hh, this.z - hd), // 2
+                    new Vertex(this.x - hw, this.y + hh, this.z - hd), // 3
+                    new Vertex(this.x - hw, this.y - hh, this.z + hd), // 4
+                    new Vertex(this.x + hw, this.y - hh, this.z + hd), // 5
+                    new Vertex(this.x + hw, this.y + hh, this.z + hd), // 6
+                    new Vertex(this.x - hw, this.y + hh, this.z + hd)  // 7
+                ];
+
+                this.Triangles = [
+                    // Front face
+                    [0, 1, 2], [0, 2, 3],
+                    // Back face
+                    [5, 4, 7], [5, 7, 6],
+                    // Left face
+                    [4, 0, 3], [4, 3, 7],
+                    // Right face
+                    [1, 5, 6], [1, 6, 2],
+                    // Top face
+                    [3, 2, 6], [3, 6, 7],
+                    // Bottom face
+                    [4, 5, 1], [4, 1, 0]
+                ];
+            }
+        }
+
+        // Sphere Class
+        class Sphere {
+            constructor(options = {}) {
+                this.x = options.x || 0;
+                this.y = options.y || 0;
+                this.z = options.z || 0;
+                this.radius = options.radius || 50;
+                this.segments = options.segments || 12;
+                this.name = options.name || "sphere";
+                this.color = options.color || { r: 100, g: 150, b: 200 };
+                this.Vertices = [];
+                this.Triangles = [];
+            }
+
+            setUp() {
+                this.Vertices = [];
+                this.Triangles = [];
+
+                // Create vertices
+                for (let lat = 0; lat <= this.segments; lat++) {
+                    const theta = (lat * Math.PI) / this.segments;
+                    const sinTheta = Math.sin(theta);
+                    const cosTheta = Math.cos(theta);
+
+                    for (let lon = 0; lon <= this.segments; lon++) {
+                        const phi = (lon * 2 * Math.PI) / this.segments;
+                        const sinPhi = Math.sin(phi);
+                        const cosPhi = Math.cos(phi);
+
+                        const x = this.x + this.radius * sinTheta * cosPhi;
+                        const y = this.y + this.radius * cosTheta;
+                        const z = this.z + this.radius * sinTheta * sinPhi;
+
+                        this.Vertices.push(new Vertex(x, y, z));
+                    }
+                }
+
+                // Create triangles
+                for (let lat = 0; lat < this.segments; lat++) {
+                    for (let lon = 0; lon < this.segments; lon++) {
+                        const first = lat * (this.segments + 1) + lon;
+                        const second = first + this.segments + 1;
+
+                        this.Triangles.push([first, second, first + 1]);
+                        this.Triangles.push([second, second + 1, first + 1]);
+                    }
+                }
+            }
+        }
+
+        // Canvas Setup
+        const canvas = document.getElementById('c');
+        const context = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+        const centerX = canvasWidth / 2;
+        const centerY = canvasHeight / 2;
+
+        // Scene Setup
+        const Shapes = [];
+        Shapes[0] = new Cube({x: 200, y: 100, z: 300, w: 200, h: 200, d: 200, name: "back cube"});
+        Shapes[1] = new Cube({x: 400, y: 300, z: 200, w: 400, h: 100, d: 100, name: "middle cube"});
+        Shapes[2] = new Sphere({x: 0, y: 0, z: 100, radius: 150, segments: 15, name: "front sphere"});
+
+        Shapes[0].color = { r: 255, g: 100, b: 100 };
+        Shapes[1].color = { r: 100, g: 255, b: 100 };
+        Shapes[2].color = { r: 100, g: 100, b: 255 };
+
+        for (let shape of Shapes) {
+            shape.setUp();
+        }
+
+        const camera = new Camera({x: 0, y: 0, z: -500});
+        const light = new Light({x: 500, y: -200, z: 100, intensity: 1});
+
+        // Input handling
+        const keys = {};
+        let mouseDown = false;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+
+        document.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
+        document.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
+
+        canvas.addEventListener('mousedown', (e) => {
+            mouseDown = true;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+        });
+
+        canvas.addEventListener('mouseup', () => mouseDown = false);
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (mouseDown) {
+                const deltaX = e.clientX - lastMouseX;
+                const deltaY = e.clientY - lastMouseY;
+                
+                camera.rotationX += deltaX * 0.01;
+                camera.rotationY += deltaY * 0.01;
+                
+                camera.rotationY = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotationY));
+                
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+            }
+        });
+
+        function updateMovement() {
+            const speed = 10;
+            
+            if (keys['w']) {
+                camera.x += Math.sin(camera.rotationX) * speed;
+                camera.z += Math.cos(camera.rotationX) * speed;
+            }
+            if (keys['s']) {
+                camera.x -= Math.sin(camera.rotationX) * speed;
+                camera.z -= Math.cos(camera.rotationX) * speed;
+            }
+            if (keys['a']) {
+                camera.x -= Math.cos(camera.rotationX) * speed;
+                camera.z += Math.sin(camera.rotationX) * speed;
+            }
+            if (keys['d']) {
+                camera.x += Math.cos(camera.rotationX) * speed;
+                camera.z -= Math.sin(camera.rotationX) * speed;
+            }
+            if (keys['q']) camera.y -= speed;
+            if (keys['e']) camera.y += speed;
+        }
+
+        // Simple Lighting Functions
+        function addPerspective(point, fov) {
+            if (!point || point.z <= 0) return null;
+            
+            const scale = fov / point.z;
+            
+            return {
+                x: point.x * scale + centerX,
+                y: point.y * scale + centerY,
+                z: point.z
+            };
+        }
+
+        function isTriangleFacingCamera(p1, p2, p3) {
+            if (!p1 || !p2 || !p3) return false;
+            
+            const v1 = { x: p2.x - p1.x, y: p2.y - p1.y };
+            const v2 = { x: p3.x - p1.x, y: p3.y - p1.y };
+            
+            const crossZ = v1.x * v2.y - v1.y * v2.x;
+            
+            return crossZ > 0;
+        }
+
+        // Simplified triangle filling with basic lighting
+        function fillTriangleSimple(v1, v2, v3, normal, worldV1, worldV2, worldV3, light, materialColor) {
+            if (!v1 || !v2 || !v3 || !worldV1 || !worldV2 || !worldV3) return;
+            
+            // Calculate triangle center for lighting
+            const centerWorld = {
+                x: (worldV1.x + worldV2.x + worldV3.x) / 3,
+                y: (worldV1.y + worldV2.y + worldV3.y) / 3,
+                z: (worldV1.z + worldV2.z + worldV3.z) / 3
+            };
+
+            // Simple directional lighting calculation
+            const lightDir = vectorNormalize(vectorSubtract(light, centerWorld));
+            let intensity = Math.max(0, vectorDot(normal, lightDir));
+            
+            // Add ambient lighting
+            const ambient = 0.2;
+            intensity = Math.min(1, intensity + ambient);
+            
+            // Apply lighting to material color
+            const finalColor = {
+                r: Math.floor(materialColor.r * intensity * light.intensity),
+                g: Math.floor(materialColor.g * intensity * light.intensity),
+                b: Math.floor(materialColor.b * intensity * light.intensity)
+            };
+
+            // Clamp colors to valid range
+            finalColor.r = Math.max(0, Math.min(255, finalColor.r));
+            finalColor.g = Math.max(0, Math.min(255, finalColor.g));
+            finalColor.b = Math.max(0, Math.min(255, finalColor.b));
+
+            // Draw the triangle
+            context.beginPath();
+            context.moveTo(v1.x, v1.y);
+            context.lineTo(v2.x, v2.y);
+            context.lineTo(v3.x, v3.y);
+            context.closePath();
+            context.fillStyle = `rgb(${finalColor.r}, ${finalColor.g}, ${finalColor.b})`;
+            context.fill();
+        }
+
+        // Text rendering functions
+        function render3DText(worldPos, text, camera, options = {}) {
+            const opts = {
+                fontSize: options.fontSize || 16,
+                font: options.font || 'Arial',
+                color: options.color || '#ffffff',
+                backgroundColor: options.backgroundColor || null,
+                padding: options.padding || 4,
+                fixedSize: options.fixedSize || true,
+                maxDistance: options.maxDistance || 2000,
+                ...options
+            };
+
+            const translated = {
+                x: worldPos.x - camera.x,
+                y: worldPos.y - camera.y,
+                z: worldPos.z - camera.z
+            };
+
+            let rotated = MatrixTimesVector(rotYMatrix(-camera.rotationX), translated);
+            rotated = MatrixTimesVector(rotXMatrix(camera.rotationY), rotated);
+
+            if (rotated.z <= 0 || rotated.z > opts.maxDistance) {
+                return;
+            }
+
+            const projected = addPerspective(rotated, camera.fov);
+            if (!projected) return;
+
+            let scale = 1;
+            if (!opts.fixedSize) {
+                scale = Math.max(0.1, Math.min(2, camera.fov / rotated.z * 0.5));
+            }
+
+            const finalFontSize = Math.floor(opts.fontSize * scale);
+            
+            context.save();
+            
+            context.font = `${finalFontSize}px ${opts.font}`;
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            
+            const textMetrics = context.measureText(text);
+            const textWidth = textMetrics.width;
+            const textHeight = finalFontSize;
+            
+            if (opts.backgroundColor) {
+                context.fillStyle = opts.backgroundColor;
+                const bgX = projected.x - textWidth / 2 - opts.padding;
+                const bgY = projected.y - textHeight / 2 - opts.padding;
+                const bgWidth = textWidth + opts.padding * 2;
+                const bgHeight = textHeight + opts.padding * 2;
+                
+                context.fillRect(bgX, bgY, bgWidth, bgHeight);
+            }
+            
+            context.fillStyle = opts.color;
+            context.fillText(text, projected.x, projected.y);
+            
+            context.restore();
+        }
+
+        function renderFloatingText(shape, text, camera, options = {}) {
+            const floatHeight = options.floatHeight || 100;
+            const textPos = {
+                x: shape.x,
+                y: shape.y - floatHeight,
+                z: shape.z
+            };
+            
+            render3DText(textPos, text, camera, options);
+        }
+
+        function renderUIText(x, y, text, options = {}) {
+            const opts = {
+                fontSize: options.fontSize || 16,
+                font: options.font || 'Arial',
+                color: options.color || '#ffffff',
+                backgroundColor: options.backgroundColor || null,
+                padding: options.padding || 4,
+                align: options.align || 'left',
+                baseline: options.baseline || 'top',
+                ...options
+            };
+
+            context.save();
+            
+            context.font = `${opts.fontSize}px ${opts.font}`;
+            context.textAlign = opts.align;
+            context.textBaseline = opts.baseline;
+            
+            if (opts.backgroundColor) {
+                const textMetrics = context.measureText(text);
+                const textWidth = textMetrics.width;
+                const textHeight = opts.fontSize;
+                
+                let bgX = x;
+                if (opts.align === 'center') bgX -= textWidth / 2;
+                else if (opts.align === 'right') bgX -= textWidth;
+                
+                let bgY = y;
+                if (opts.baseline === 'middle') bgY -= textHeight / 2;
+                else if (opts.baseline === 'bottom') bgY -= textHeight;
+                
+                context.fillStyle = opts.backgroundColor;
+                context.fillRect(
+                    bgX - opts.padding, 
+                    bgY - opts.padding, 
+                    textWidth + opts.padding * 2, 
+                    textHeight + opts.padding * 2
+                );
+            }
+            
+            context.fillStyle = opts.color;
+            context.fillText(text, x, y);
+            
+            context.restore();
+        }
+
+        // Main rendering engine
+        function engine() {
+            updateMovement();
+
+            // Clear canvas
+            context.clearRect(0, 0, canvasWidth, canvasHeight);
+            context.fillStyle = '#1a1a1a';
+            context.fillRect(0, 0, canvasWidth, canvasHeight);
+
+            let shapesWithDepth = [];
+
+            // Process each shape
+            for (let shape of Shapes) {
+                let projected = [];
+                let worldVertices = [];
+                let totalDepth = 0;
+                let validVertices = 0;
+
+                // Transform vertices
+                for (let v of shape.Vertices) {
+                    let translated = new Vertex(
+                        v.x - camera.x,
+                        v.y - camera.y,
+                        v.z - camera.z
+                    );
+
+                    let rotated = MatrixTimesVector(rotYMatrix(-camera.rotationX), translated);
+                    rotated = MatrixTimesVector(rotXMatrix(camera.rotationY), rotated);
+
+                    let projected2D = addPerspective(rotated, camera.fov);
+
+                    if (!projected2D) {
+                        projected.push(null);
+                        worldVertices.push(null);
+                        continue;
+                    }
+
+                    projected2D.z = rotated.z;
+                    projected.push(projected2D);
+                    worldVertices.push(v);
+                    
+                    totalDepth += rotated.z;
+                    validVertices++;
+                }
+
+                const avgShapeDepth = validVertices > 0 ? totalDepth / validVertices : 0;
+
+                let trianglesWithDepth = [];
+                
+                // Process triangles
+                for (let i = 0; i < shape.Triangles.length; i++) {
+                    const t = shape.Triangles[i];
+                    const p1 = projected[t[0]];
+                    const p2 = projected[t[1]];
+                    const p3 = projected[t[2]];
+
+                    const w1 = worldVertices[t[0]];
+                    const w2 = worldVertices[t[1]];
+                    const w3 = worldVertices[t[2]];
+
+                    if (!p1 || !p2 || !p3 || !w1 || !w2 || !w3) continue;
+
+                    // Calculate normal
+                    const edge1 = vectorSubtract(w2, w1);
+                    const edge2 = vectorSubtract(w3, w1);
+                    const normal = vectorNormalize(vectorCross(edge1, edge2));
+
+                    const avgTriangleDepth = (p1.z + p2.z + p3.z) / 3;
+
+                    if (isTriangleFacingCamera(p1, p2, p3)) {
+                        trianglesWithDepth.push({
+                            vertices: [p1, p2, p3],
+                            worldVertices: [w1, w2, w3],
+                            normal: normal,
+                            avgZ: avgTriangleDepth
+                        });
+                    }
+                }
+
+                trianglesWithDepth.sort((a, b) => b.avgZ - a.avgZ);
+
+                shapesWithDepth.push({
+                    shape: shape,
+                    triangles: trianglesWithDepth,
+                    avgDepth: avgShapeDepth
+                });
+            }
+
+            // Sort shapes by depth
+            shapesWithDepth.sort((a, b) => b.avgDepth - a.avgDepth);
+
+            // Render triangles
+            for (let shapeData of shapesWithDepth) {
+                const shape = shapeData.shape;
+                const triangles = shapeData.triangles;
+
+                for (let triangle of triangles) {
+                    const [p1, p2, p3] = triangle.vertices;
+                    const [w1, w2, w3] = triangle.worldVertices;
+                    
+                    fillTriangleSimple(p1, p2, p3, triangle.normal, w1, w2, w3, light, shape.color);
+                }
+            }
+
+            // Render floating text labels
+            renderFloatingText(Shapes[0], "Back Cube", camera, {
+                fontSize: 20,
+                color: '#ff6666',
+                backgroundColor: 'rgba(0,0,0,0.7)',
+                fixedSize: true,
+                floatHeight: 120
+            });
+
+            renderFloatingText(Shapes[1], "Middle Cube", camera, {
+                fontSize: 20,
+                color: '#66ff66',
+                backgroundColor: 'rgba(0,0,0,0.7)',
+                fixedSize: true,
+                floatHeight: 80
+            });
+
+            renderFloatingText(Shapes[2], "Front Sphere", camera, {
+                fontSize: 20,
+                color: '#6666ff',
+                backgroundColor: 'rgba(0,0,0,0.7)',
+                fixedSize: true,
+                floatHeight: 180
+            });
+
+            // Render UI text
+            renderUIText(10, 10, "Simplified 3D Lighting Demo", {
+                fontSize: 20,
+                color: '#ffffff',
+                backgroundColor: 'rgba(0,0,0,0.8)',
+                padding: 8
+            });
+
+            renderUIText(10, 45, `Camera: (${Math.floor(camera.x)}, ${Math.floor(camera.y)}, ${Math.floor(camera.z)})`, {
+                fontSize: 14,
+                color: '#cccccc',
+                backgroundColor: 'rgba(0,0,0,0.6)',
+                padding: 4
+            });
+
+            renderUIText(10, 70, `Light: (${Math.floor(light.x)}, ${Math.floor(light.y)}, ${Math.floor(light.z)})`, {
+                fontSize: 14,
+                color: '#ffff66',
+                backgroundColor: 'rgba(0,0,0,0.6)',
+                padding: 4
+            });
+
+            renderUIText(10, canvasHeight - 25, "Use WASD to move, Mouse to look around", {
+                fontSize: 14,
+                color: '#aaaaaa',
+                backgroundColor: 'rgba(0,0,0,0.6)',
+                padding: 4
+            });
+
+            requestAnimationFrame(engine);
+        }
+
+        // Start the engine
+        engine();
+    </script>
+</body>
+</html>
