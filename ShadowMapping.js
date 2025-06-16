@@ -1,29 +1,22 @@
-// ===== SIMPLIFIED SHADOW MAPPING =====
-// This file now contains minimal shadow functionality for backward compatibility
-// Most complex shadow calculations have been removed for better performance
+// ===== SIMPLIFIED SHADOW SYSTEM =====
+// Minimal shadow functionality for performance optimization
 
-// Simple shadow check - returns basic shadow/no shadow result
+// Basic shadow functions (disabled for performance)
 function isPointInShadow(worldPoint, light, allShapes, excludeShape = null) {
-    // Simplified: no complex shadow calculations
-    // You can implement basic shadow logic here if needed
     return false; // Always no shadow for maximum performance
 }
 
-// Simple shadow with normal (for compatibility)
 function isPointInShadowWithNormal(worldPoint, surfaceNormal, light, allShapes, excludeShape = null) {
-    return false; // No shadows for simplicity
+    return false;
 }
 
-// Basic shadow intensity (always returns full lighting)
 function calculateShadowIntensity(worldPoint, light, allShapes, excludeShape = null, surfaceNormal = null) {
     return 1.0; // Always full lighting
 }
 
-// Multi-light shadows (simplified to return no shadows)
+// Multi-light shadow calculation (simplified)
 function calculateMultiLightShadows(worldPoint, surfaceNormal, lights, allShapes, excludeShape = null) {
-    const shadowResults = new Array(lights.length);
-    shadowResults.fill(1.0); // No shadows for any light
-    return shadowResults;
+    return new Array(lights.length).fill(1.0); // No shadows for any light
 }
 
 // Directional shadow (disabled)
@@ -31,20 +24,8 @@ function isPointInDirectionalShadow(worldPoint, surfaceNormal, lightDirection, a
     return false;
 }
 
-// Batch shadow processing (simplified)
-function calculateBatchShadows(worldPoints, surfaceNormals, lights, allShapes, excludeShapes = null) {
-    const results = new Array(worldPoints.length);
-    
-    for (let p = 0; p < worldPoints.length; p++) {
-        results[p] = new Array(lights.length).fill(1.0); // No shadows
-    }
-    
-    return results;
-}
-
-// Optional: Simple ray-triangle intersection for basic use cases
+// Ray-triangle intersection for collision detection
 function rayTriangleIntersection(rayOrigin, rayDirection, v0, v1, v2) {
-    // Basic implementation - can be used for simple collision detection
     const EPSILON = 0.0000001;
     
     const edge1 = {
@@ -59,7 +40,7 @@ function rayTriangleIntersection(rayOrigin, rayDirection, v0, v1, v2) {
         z: v2.z - v0.z
     };
     
-    // Cross product
+    // Cross product: rayDirection × edge2
     const h = {
         x: rayDirection.y * edge2.z - rayDirection.z * edge2.y,
         y: rayDirection.z * edge2.x - rayDirection.x * edge2.z,
@@ -68,9 +49,7 @@ function rayTriangleIntersection(rayOrigin, rayDirection, v0, v1, v2) {
     
     const a = edge1.x * h.x + edge1.y * h.y + edge1.z * h.z;
     
-    if (a > -EPSILON && a < EPSILON) {
-        return null; // Ray is parallel
-    }
+    if (a > -EPSILON && a < EPSILON) return null; // Ray is parallel
     
     const f = 1.0 / a;
     const s = {
@@ -107,52 +86,22 @@ function rayTriangleIntersection(rayOrigin, rayDirection, v0, v1, v2) {
     return null;
 }
 
-// Debug function (simplified)
-function debugShadowRay(worldPoint, surfaceNormal, light, allShapes, excludeShape = null) {
-    return {
-        inShadow: false,
-        message: "Shadow system simplified - no complex shadows calculated"
-    };
-}
-
 // Performance stats (placeholder)
-let shadowCalculationStats = {
-    totalShadowTests: 0,
-    shadowHits: 0,
-    averageRaysPerTest: 0,
-    lastResetTime: Date.now()
+const shadowStats = {
+    totalTests: 0,
+    hits: 0,
+    lastReset: Date.now()
 };
 
 function getShadowPerformanceStats() {
     return {
-        ...shadowCalculationStats,
-        testsPerSecond: 0,
-        hitRate: 0,
-        message: "Shadow system simplified - performance stats disabled"
+        ...shadowStats,
+        message: "Shadow system simplified for performance"
     };
 }
 
 function resetShadowPerformanceStats() {
-    shadowCalculationStats = {
-        totalShadowTests: 0,
-        shadowHits: 0,
-        averageRaysPerTest: 0,
-        lastResetTime: Date.now()
-    };
-}
-
-// Export functions for compatibility
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-        rayTriangleIntersection,
-        isPointInShadow,
-        isPointInShadowWithNormal,
-        calculateShadowIntensity,
-        calculateMultiLightShadows,
-        isPointInDirectionalShadow,
-        calculateBatchShadows,
-        debugShadowRay,
-        getShadowPerformanceStats,
-        resetShadowPerformanceStats
-    };
+    shadowStats.totalTests = 0;
+    shadowStats.hits = 0;
+    shadowStats.lastReset = Date.now();
 }
