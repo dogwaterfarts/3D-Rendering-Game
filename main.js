@@ -13,23 +13,101 @@ const centerY = canvasHeight / 2;
 const Shapes = [
     new Cube({x: 200, y: 100, z: 300, w: 200, h: 200, d: 200, name: "back cube", subdivisions: 3}),
     new Sphere({x: 0, y: 0, z: 500, radius: 150, segments: 30, name: "front sphere"}),
+    new Cylinder({x: 900, y: -50, z: 950, radius: 50, height: 250, segments: 10, name: "cylinder", capBottom: true, capTop: true}),
+    new Wedge({x: 700, y: -150, z: 300, height: 50, depth: 200, name: "wedge", subdivisions: 4}),
+    // new Pyramid({x: 600, y: -50, z: -400, radius: 200, height: 250, segments: 10, isCone: true, name: "cone", capBottom: true}),
+    // MarketStand.createFruitStand({x: 600, y: -150, z: -400, height: 400, width: 250, depth: 200})
 ];
 
 Shapes[0].color = { r: 255, g: 100, b: 100 };
 Shapes[1].color = { r: 100, g: 100, b: 255 };
-
-Shapes[0].color = { r: 255, g: 100, b: 100 };
-Shapes[1].color = { r: 100, g: 100, b: 255 };
-// House and MarketStand colors are set in their constructors
-
-Shapes[0].color = { r: 255, g: 100, b: 100 };
-Shapes[1].color = { r: 100, g: 100, b: 255 };
+Shapes[2].color = { r: 100, g: 100, b: 100 };
+Shapes[3].color = { r: 200, g: 100, b: 200 };
+// Shapes[4].color = { r: 250, g: 180, b: 200 };
 
 // Create tiled floor
 const tiledFloor = new TiledFloor(800, 15);
 
 // Set up shapes
 Shapes.forEach(shape => shape.setUp());
+
+// Create proximity prompt manager
+const promptManager = new ProximityPromptManager();
+
+// Add prompts to existing shapes
+const cubePrompt = promptManager.addPrompt(new ProximityPrompt({
+    object: Shapes[0], // back cube
+    promptText: "Inspect Cube",
+    holdDuration: 1500,
+    activationDistance: 200,
+    progressColor: '#ff6666',
+    onActivate: () => {
+        console.log("Cube inspected!");
+        // Change cube color when activated
+        Shapes[0].color = { 
+            r: Math.random() * 255, 
+            g: Math.random() * 100 + 100, 
+            b: Math.random() * 100 + 100 
+        };
+    },
+    onHoldStart: () => {
+        console.log("Started inspecting cube...");
+    },
+    onHoldEnd: () => {
+        console.log("Stopped inspecting cube");
+    }
+}));
+
+const spherePrompt = promptManager.addPrompt(new ProximityPrompt({
+    object: Shapes[1], // front sphere
+    promptText: "Touch Sphere",
+    holdDuration: 1000,
+    activationDistance: 240,
+    progressColor: '#6666ff',
+    onActivate: () => {
+        console.log("Sphere touched!");
+        // Change sphere color and add a light effect
+        Shapes[1].color = { 
+            r: Math.random() * 100 + 100, 
+            g: Math.random() * 100 + 100, 
+            b: Math.random() * 255 
+        };
+        
+        // Temporarily boost a light's intensity
+        if (lights[1]) {
+            lights[1].intensity = 2.0;
+            setTimeout(() => {
+                lights[1].intensity = 1.2;
+            }, 500);
+        }
+    },
+    onHoldStart: () => {
+        console.log("Started touching sphere...");
+    }
+}));
+
+// Create a static interaction point
+const staticInteractionPoint = {
+    x: -300,
+    y: 0,
+    z: 200
+};
+
+const staticPrompt = promptManager.addPrompt(new ProximityPrompt({
+    position: staticInteractionPoint,
+    promptText: "Mysterious Point",
+    holdDuration: 2000,
+    activationDistance: 150,
+    progressColor: '#ffff00',
+    backgroundColor: 'rgba(50, 0, 50, 0.9)',
+    textColor: '#ffff66',
+    onActivate: () => {
+        console.log("Mystery activated!");
+        // Toggle light movement
+        lightMovement = !lightMovement;
+        console.log(`Light movement ${lightMovement ? 'enabled' : 'disabled'}`);
+    }
+}));
 
 // Performance optimization variables
 let lastCameraX = null;
@@ -83,6 +161,9 @@ let lastCameraRotationY = null;
 
 const engine = () => {
     updateMovement();
+
+    // Update and render proximity prompts FIRST
+    promptManager.update(camera, 16); // 16ms for ~60fps
 
     // Clear canvas
     context.fillStyle = '#1a1a1a';
@@ -247,8 +328,18 @@ const engine = () => {
         { fontSize: 18, color: '#6666ff', backgroundColor: 'rgba(0,0,0,0.7)' }
     );
 
+    // Render static interaction point as a small indicator
+    render3DText(
+        staticInteractionPoint,
+        "●", camera,
+        { fontSize: 24, color: '#ffff66', backgroundColor: 'rgba(50,0,50,0.8)' }
+    );
+
+    // RENDER PROXIMITY PROMPTS HERE (after 3D content, before UI)
+    promptManager.render(camera, context, canvasWidth, canvasHeight);
+
     // UI Information
-    renderUIText(10, 10, "3D Point Light Rendering", {
+    renderUIText(10, 10, "3D Point Light Rendering with Proximity Prompts", {
         fontSize: 20, color: '#ffffff', backgroundColor: 'rgba(0,0,0,0.8)', padding: 8
     });
 
@@ -264,8 +355,23 @@ const engine = () => {
         fontSize: 14, color: '#cccccc', backgroundColor: 'rgba(0,0,0,0.6)', padding: 4
     });
 
+    // Active prompts information
+    const activePrompts = promptManager.getActivePrompts();
+    if (activePrompts.length > 0) {
+        renderUIText(10, 120, `Active Prompts: ${activePrompts.length}`, {
+            fontSize: 14, color: '#ffff66', backgroundColor: 'rgba(0,0,0,0.6)', padding: 4
+        });
+        
+        // Debug: Show distances to prompts
+        activePrompts.forEach((prompt, i) => {
+            renderUIText(10, 145 + i * 20, `${prompt.promptText}: ${Math.floor(prompt.lastDistance)}px`, {
+                fontSize: 12, color: '#ffaaaa', backgroundColor: 'rgba(0,0,0,0.6)', padding: 2
+            });
+        });
+    }
+
     // Light information
-    let yOffset = 125;
+    let yOffset = 125 + (activePrompts.length * 20);
     let activePointLights = 0;
     lights.forEach((light, i) => {
         if (!light.enabled || light.type !== 'point') return;
@@ -282,20 +388,52 @@ const engine = () => {
         fontSize: 14, color: '#ffff66', backgroundColor: 'rgba(0,0,0,0.6)', padding: 4
     });
 
+    renderUIText(canvasWidth - 200, 10, `Money: ${playerStats.Money}`, {
+        fontSize: 20, color: 'rgba(0, 255, 55, 0.84)', backgroundColor: 'rgba(0, 0, 0, 0.6)', padding: 5
+    });
+
+
     // Controls
     const controls = [
         "Press 1-4 to toggle lights",
         "Press L to toggle light movement", 
-        "Use WASD to move, Mouse to look around"
+        "Use WASD to move, Mouse to look around",
+        "Hold E near objects to interact"
     ];
     
     controls.forEach((control, i) => {
-        renderUIText(10, canvasHeight - 75 + (i * 25), control, {
+        renderUIText(10, canvasHeight - 100 + (i * 25), control, {
             fontSize: 14, color: '#aaaaaa', backgroundColor: 'rgba(0,0,0,0.6)', padding: 4
         });
     });
 
     requestAnimationFrame(engine);
 }
+
+// Debug function to test proximity prompts
+function debugProximityPrompts() {
+    console.log("=== Proximity Prompt Debug ===");
+    console.log("Total prompts:", promptManager.getPrompts().length);
+    console.log("Active prompts:", promptManager.getActivePrompts().length);
+    console.log("Camera position:", camera.x, camera.y, camera.z);
+    
+    promptManager.getPrompts().forEach((prompt, i) => {
+        console.log(`Prompt ${i}:`, {
+            text: prompt.promptText,
+            position: prompt.position,
+            distance: prompt.lastDistance,
+            activationDistance: prompt.activationDistance,
+            isVisible: prompt.isVisible,
+            enabled: prompt.enabled
+        });
+    });
+}
+
+// Add debug key (press P to debug)
+document.addEventListener('keydown', (event) => {
+    if (event.key.toLowerCase() === 'p') {
+        debugProximityPrompts();
+    }
+});
 
 engine();

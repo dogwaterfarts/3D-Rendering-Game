@@ -69,7 +69,9 @@ document.addEventListener("keydown", function(event) {
             event.preventDefault(); // Prevent page scrolling
             keys.space = true;
             break;
-
+        case "e":
+            playerStats.Money += 1;
+            break;
         case '1':
             lights[0].enabled = !lights[0].enabled;
             break;

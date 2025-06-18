@@ -1,50 +1,3 @@
-/**
- * 3D Graphics Library - Core Shape Classes
- * Provides basic 3D shapes, lighting, and camera functionality
- */
-
-// Utility functions for vector operations
-function vectorSubtract(v1, v2) {
-    return {
-        x: v1.x - v2.x,
-        y: v1.y - v2.y,
-        z: v1.z - v2.z
-    };
-}
-
-function vectorDot(v1, v2) {
-    return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
-}
-
-function vectorNormalize(v) {
-    const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-    if (length === 0) return { x: 0, y: 0, z: 0 };
-    return {
-        x: v.x / length,
-        y: v.y / length,
-        z: v.z / length
-    };
-}
-
-// Constants
-const MAX_SUBDIVISIONS = 8;
-const MIN_SUBDIVISIONS = 1;
-const DEFAULT_COLOR = { r: 100, g: 150, b: 200 };
-
-/**
- * Represents a 3D vertex with x, y, z coordinates
- */
-class Vertex {
-    constructor(x, y, z) {
-        this.x = x;
-        this.y = y;
-        this.z = z;
-    }
-}
-
-/**
- * Base class for 3D shapes with common properties and methods
- */
 class Shape3D {
     constructor({ x, y, z, name, color = DEFAULT_COLOR }) {
         this.name = name;
@@ -397,339 +350,513 @@ class Sphere extends Shape3D {
     }
 }
 
+
 /**
- * Text rendering on cube faces
+ * 3D Wedge (triangular prism) with configurable dimensions and subdivisions
  */
-class Text {
-    static FACES = {
-        FRONT: "front",
-        BACK: "back",
-        LEFT: "left",
-        RIGHT: "right",
-        TOP: "top",
-        BOTTOM: "bottom"
-    };
-
-    static ALIGNMENTS = {
-        CENTER: "center",
-        LEFT: "left",
-        RIGHT: "right"
-    };
-
+class Wedge extends Shape3D {
     constructor({
-        text = "Sample Text",
-        cube = null,
-        face = Text.FACES.FRONT,
-        fontSize = 20,
-        fontFamily = "Arial",
-        color = { r: 255, g: 255, b: 255 },
-        offsetX = 0,
-        offsetY = 0,
-        alignment = Text.ALIGNMENTS.CENTER
+        x, y, z,
+        width = 100,
+        height = 100,
+        depth = 100,
+        name = "wedge",
+        color = DEFAULT_COLOR,
+        subdivisions = 1
     }) {
-        this.text = text;
-        this.cube = cube;
-        this.face = face;
-        this.fontSize = fontSize;
-        this.fontFamily = fontFamily;
-        this.color = { ...color };
-        this.offsetX = offsetX;
-        this.offsetY = offsetY;
-        this.alignment = alignment;
-        this.isVisible = true;
-    }
-
-    /**
-     * Get face data for text positioning
-     */
-    getFaceData() {
-        if (!this.cube) return null;
-
-        const { x, y, z, w, h, d } = this.cube;
-        const faceConfigs = {
-            [Text.FACES.FRONT]: {
-                center: { x, y, z: z - d },
-                normal: { x: 0, y: 0, z: -1 },
-                uVector: { x: 1, y: 0, z: 0 },
-                vVector: { x: 0, y: 1, z: 0 }
-            },
-            [Text.FACES.BACK]: {
-                center: { x, y, z: z + d },
-                normal: { x: 0, y: 0, z: 1 },
-                uVector: { x: -1, y: 0, z: 0 },
-                vVector: { x: 0, y: 1, z: 0 }
-            },
-            [Text.FACES.LEFT]: {
-                center: { x: x - w, y, z },
-                normal: { x: -1, y: 0, z: 0 },
-                uVector: { x: 0, y: 0, z: 1 },
-                vVector: { x: 0, y: 1, z: 0 }
-            },
-            [Text.FACES.RIGHT]: {
-                center: { x: x + w, y, z },
-                normal: { x: 1, y: 0, z: 0 },
-                uVector: { x: 0, y: 0, z: -1 },
-                vVector: { x: 0, y: 1, z: 0 }
-            },
-            [Text.FACES.TOP]: {
-                center: { x, y: y + h, z },
-                normal: { x: 0, y: 1, z: 0 },
-                uVector: { x: 1, y: 0, z: 0 },
-                vVector: { x: 0, y: 0, z: 1 }
-            },
-            [Text.FACES.BOTTOM]: {
-                center: { x, y: y - h, z },
-                normal: { x: 0, y: -1, z: 0 },
-                uVector: { x: 1, y: 0, z: 0 },
-                vVector: { x: 0, y: 0, z: -1 }
-            }
-        };
-
-        return faceConfigs[this.face] || null;
-    }
-
-    /**
-     * Check if the face is visible from camera position
-     */
-    isFaceVisible(camera) {
-        const faceData = this.getFaceData();
-        if (!faceData) return false;
-
-        const { center, normal } = faceData;
-        const toCamera = vectorSubtract(camera, center);
+        super({ x, y, z, name, color });
         
-        return vectorDot(vectorNormalize(toCamera), normal) > 0;
+        this.subdivisions = Shape3D.clampSubdivisions(subdivisions);
+        
+        // Store half-dimensions for easier calculations
+        this.w = width / 2;
+        this.h = height / 2;
+        this.d = depth / 2;
+    }
+
+    setUp() {
+        this.clearGeometry();
+        this.generateWedgeGeometry();
     }
 
     /**
-     * Get world position for text rendering
+     * Generate wedge geometry - a triangular prism with proper faces
      */
-    getTextPosition() {
-        const faceData = this.getFaceData();
-        if (!faceData) return null;
+    generateWedgeGeometry() {
+        this.generateTriangularFaces();  // Front and back triangular faces
+        this.generateRectangularFaces(); // Bottom, left slope, right slope
+    }
 
-        const { center, uVector, vVector } = faceData;
+    /**
+     * Generate the triangular front and back faces
+     */
+    generateTriangularFaces() {
+        // Front triangular face (at z = -d)
+        this.generateTriangularFace(-this.d, false);
+        
+        // Back triangular face (at z = +d)
+        this.generateTriangularFace(this.d, true);
+    }
 
-        return {
-            x: center.x + (uVector.x * this.offsetX) + (vVector.x * this.offsetY),
-            y: center.y + (uVector.y * this.offsetX) + (vVector.y * this.offsetY),
-            z: center.z + (uVector.z * this.offsetX) + (vVector.z * this.offsetY)
-        };
+    /**
+     * Generate a single triangular face at given z position
+     */
+    generateTriangularFace(zPos, reverse) {
+        const startIndex = this.Vertices.length;
+        
+        // Three corner vertices of the triangle
+        const vertices = [
+            new Vertex(this.x - this.w, this.y + this.h, this.z + zPos),  // Bottom left (higher y since -y is up)
+            new Vertex(this.x + this.w, this.y + this.h, this.z + zPos),  // Bottom right
+            new Vertex(this.x, this.y - this.h, this.z + zPos)            // Top center (lower y since -y is up)
+        ];
+        
+        this.Vertices.push(...vertices);
+        
+        // Create triangle with proper winding
+        if (reverse) {
+            this.Triangles.push([startIndex, startIndex + 2, startIndex + 1]);
+        } else {
+            this.Triangles.push([startIndex, startIndex + 1, startIndex + 2]);
+        }
+    }
+
+    /**
+     * Generate rectangular faces (bottom, left slope, right slope)
+     */
+    generateRectangularFaces() {
+        // Bottom face (rectangle from bottom edge to bottom edge)
+        this.generateBottomFace();
+        
+        // Left slope face (from left bottom edge to top point)
+        this.generateSlopeFace(true);  // left slope
+        
+        // Right slope face (from right bottom edge to top point)  
+        this.generateSlopeFace(false); // right slope
+    }
+
+    /**
+     * Generate bottom rectangular face
+     */
+    generateBottomFace() {
+        const startIndex = this.Vertices.length;
+        
+        // Four corners of bottom face
+        const vertices = [
+            new Vertex(this.x - this.w, this.y + this.h, this.z - this.d),  // Front bottom left
+            new Vertex(this.x + this.w, this.y + this.h, this.z - this.d),  // Front bottom right
+            new Vertex(this.x + this.w, this.y + this.h, this.z + this.d),  // Back bottom right
+            new Vertex(this.x - this.w, this.y + this.h, this.z + this.d)   // Back bottom left
+        ];
+        
+        this.Vertices.push(...vertices);
+        
+        // Two triangles for the bottom face (counter-clockwise for upward normal in -y up system)
+        this.Triangles.push([startIndex, startIndex + 2, startIndex + 1]);
+        this.Triangles.push([startIndex, startIndex + 3, startIndex + 2]);
+    }
+
+    /**
+     * Generate slope faces (left or right)
+     */
+    generateSlopeFace(isLeft) {
+        const startIndex = this.Vertices.length;
+        
+        if (isLeft) {
+            // Left slope: from left bottom edge to top center
+            const vertices = [
+                new Vertex(this.x - this.w, this.y + this.h, this.z - this.d),  // Front bottom left
+                new Vertex(this.x, this.y - this.h, this.z - this.d),          // Front top center  
+                new Vertex(this.x, this.y - this.h, this.z + this.d),          // Back top center
+                new Vertex(this.x - this.w, this.y + this.h, this.z + this.d)   // Back bottom left
+            ];
+            
+            this.Vertices.push(...vertices);
+            
+            // Two triangles for left slope (clockwise for outward normal)
+            this.Triangles.push([startIndex, startIndex + 1, startIndex + 2]);
+            this.Triangles.push([startIndex, startIndex + 2, startIndex + 3]);
+        } else {
+            // Right slope: from right bottom edge to top center
+            const vertices = [
+                new Vertex(this.x + this.w, this.y + this.h, this.z - this.d),  // Front bottom right
+                new Vertex(this.x + this.w, this.y + this.h, this.z + this.d),  // Back bottom right
+                new Vertex(this.x, this.y - this.h, this.z + this.d),          // Back top center
+                new Vertex(this.x, this.y - this.h, this.z - this.d)           // Front top center
+            ];
+            
+            this.Vertices.push(...vertices);
+            
+            // Two triangles for right slope (counter-clockwise for outward normal)
+            this.Triangles.push([startIndex, startIndex + 1, startIndex + 2]);
+            this.Triangles.push([startIndex, startIndex + 2, startIndex + 3]);
+        }
     }
 }
 
+
 /**
- * Dynamically generated tiled floor system
+ * 3D Cylinder with configurable radius, height, and detail level
  */
-class TiledFloor {
-    constructor(tileSize = 800, gridSize = 15, color = { r: 70, g: 200, b: 90 }) {
-        this.tileSize = tileSize;
-        this.gridSize = gridSize;
-        this.tiles = new Map();
-        this.floorY = 120;
-        this.lastUpdatePosition = { x: null, z: null };
-        this.color = { ...color };
-        this.renderDistance = 2;
-    }
-
-    /**
-     * Update tiles based on camera position
-     */
-    updateTiles(cameraX, cameraZ) {
-        if (!this.shouldUpdate(cameraX, cameraZ)) {
-            return;
-        }
-
-        const centerTile = {
-            x: Math.floor(cameraX / this.tileSize),
-            z: Math.floor(cameraZ / this.tileSize)
-        };
-
-        this.removeDistantTiles(centerTile);
-        this.addNeededTiles(centerTile);
-
-        this.lastUpdatePosition = { x: cameraX, z: cameraZ };
-    }
-
-    /**
-     * Check if tiles need updating based on camera movement
-     */
-    shouldUpdate(cameraX, cameraZ) {
-        if (this.lastUpdatePosition.x === null || this.lastUpdatePosition.z === null) {
-            return true;
-        }
-
-        const deltaX = Math.abs(cameraX - this.lastUpdatePosition.x);
-        const deltaZ = Math.abs(cameraZ - this.lastUpdatePosition.z);
+class Cylinder extends Shape3D {
+    constructor({
+        x, y, z,
+        radius = 50,
+        height = 100,
+        segments = 16,
+        name = "cylinder",
+        color = DEFAULT_COLOR,
+        capTop = true,
+        capBottom = true
+    }) {
+        super({ x, y, z, name, color });
         
-        return deltaX >= this.tileSize / 2 || deltaZ >= this.tileSize / 2;
+        this.radius = Math.max(1, radius);
+        this.height = height;
+        this.segments = Math.max(3, Math.min(segments, 64)); // Reasonable segment limits
+        this.capTop = capTop;
+        this.capBottom = capBottom;
+        
+        // For collision detection
+        this.w = radius;
+        this.h = height / 2;
+        this.d = radius;
+    }
+
+    setUp() {
+        this.clearGeometry();
+        this.generateCylinderGeometry();
     }
 
     /**
-     * Remove tiles that are too far from camera
+     * Generate cylinder geometry
      */
-    removeDistantTiles(centerTile) {
-        for (let [key, tile] of this.tiles) {
-            const [tileX, tileZ] = key.split(',').map(Number);
-            if (Math.abs(tileX - centerTile.x) > this.renderDistance + 1 || 
-                Math.abs(tileZ - centerTile.z) > this.renderDistance + 1) {
-                this.tiles.delete(key);
+    generateCylinderGeometry() {
+        this.generateCylinderSides();
+        
+        if (this.capTop) {
+            this.generateCylinderCap(true);  // Top cap
+        }
+        
+        if (this.capBottom) {
+            this.generateCylinderCap(false); // Bottom cap
+        }
+    }
+
+    /**
+     * Generate the curved sides of the cylinder
+     */
+    generateCylinderSides() {
+        const startIndex = this.Vertices.length;
+        
+        // Generate vertices for cylinder sides
+        for (let i = 0; i <= 1; i++) { // Two rings: top (0) and bottom (1)
+            const y = this.y + (0.5 - i) * this.height; // Flipped: top at +0.5, bottom at -0.5
+            
+            for (let j = 0; j <= this.segments; j++) {
+                const angle = (2 * Math.PI * j) / this.segments;
+                const x = this.x + this.radius * Math.cos(angle);
+                const z = this.z + this.radius * Math.sin(angle);
+                
+                this.Vertices.push(new Vertex(x, y, z));
+            }
+        }
+
+        // Generate triangles for cylinder sides
+        for (let j = 0; j < this.segments; j++) {
+            const topLeft = startIndex + j;                           // Top ring
+            const topRight = startIndex + j + 1;
+            const bottomLeft = startIndex + (this.segments + 1) + j;  // Bottom ring
+            const bottomRight = startIndex + (this.segments + 1) + j + 1;
+
+            // Two triangles per quad (adjusted winding for -y up coordinate system)
+            this.Triangles.push([topLeft, bottomLeft, topRight]);
+            this.Triangles.push([topRight, bottomLeft, bottomRight]);
+        }
+    }
+
+    /**
+     * Generate top or bottom cap of the cylinder
+     */
+    generateCylinderCap(isTop) {
+        const startIndex = this.Vertices.length;
+        const y = this.y + (isTop ? 0.5 : -0.5) * this.height; // Corrected for -y up
+        
+        // Center vertex
+        this.Vertices.push(new Vertex(this.x, y, this.z));
+        const centerIndex = startIndex;
+        
+        // Ring vertices
+        for (let j = 0; j <= this.segments; j++) {
+            const angle = (2 * Math.PI * j) / this.segments;
+            const x = this.x + this.radius * Math.cos(angle);
+            const z = this.z + this.radius * Math.sin(angle);
+            
+            this.Vertices.push(new Vertex(x, y, z));
+        }
+
+        // Generate triangles for the cap
+        for (let j = 0; j < this.segments; j++) {
+            const current = startIndex + 1 + j;
+            const next = startIndex + 1 + j + 1;
+            
+            if (isTop) {
+                // Clockwise for upward-facing normal (since -y is up)
+                this.Triangles.push([centerIndex, current, next]);
+            } else {
+                // Counter-clockwise for downward-facing normal
+                this.Triangles.push([centerIndex, next, current]);
             }
         }
     }
 
     /**
-     * Add new tiles within render distance
+     * Create a cylinder without caps (tube)
      */
-    addNeededTiles(centerTile) {
-        for (let x = centerTile.x - this.renderDistance; x <= centerTile.x + this.renderDistance; x++) {
-            for (let z = centerTile.z - this.renderDistance; z <= centerTile.z + this.renderDistance; z++) {
-                const key = `${x},${z}`;
-                if (!this.tiles.has(key)) {
-                    this.tiles.set(key, this.createTile(x, z));
+    static createTube(options) {
+        return new Cylinder({
+            ...options,
+            capTop: false,
+            capBottom: false
+        });
+    }
+
+    /**
+     * Create a cone (cylinder with top radius = 0)
+     */
+    static createCone(options) {
+        const cone = new Cylinder(options);
+        cone.generateConeGeometry = function() {
+            this.clearGeometry();
+            const startIndex = 0;
+            
+            // Center vertex at top (higher y value, but since -y is up, this is lower y)
+            this.Vertices.push(new Vertex(this.x, this.y - this.height / 2, this.z));
+            const topCenterIndex = 0;
+            
+            // Bottom ring vertices (lower y value, but since -y is up, this is higher y)
+            for (let j = 0; j <= this.segments; j++) {
+                const angle = (2 * Math.PI * j) / this.segments;
+                const x = this.x + this.radius * Math.cos(angle);
+                const z = this.z + this.radius * Math.sin(angle);
+                const y = this.y + this.height / 2;
+                
+                this.Vertices.push(new Vertex(x, y, z));
+            }
+
+            // Generate side triangles
+            for (let j = 0; j < this.segments; j++) {
+                const current = 1 + j;
+                const next = 1 + j + 1;
+                
+                this.Triangles.push([topCenterIndex, next, current]);
+            }
+
+            // Generate bottom cap if enabled
+            if (this.capBottom) {
+                const bottomCenterIndex = this.Vertices.length;
+                this.Vertices.push(new Vertex(this.x, this.y + this.height / 2, this.z));
+                
+                for (let j = 0; j < this.segments; j++) {
+                    const current = 1 + j;
+                    const next = 1 + j + 1;
+                    
+                    this.Triangles.push([bottomCenterIndex, current, next]);
                 }
             }
+        };
+        
+        cone.setUp = cone.generateConeGeometry;
+        return cone;
+    }
+}
+
+/* *
+ * General Pyramid class that can create both polygonal pyramids and cones
+ */
+class Pyramid extends Shape3D {
+    constructor({
+        x, y, z,
+        baseRadius = 50,
+        baseWidth = null,  // For square/rectangular pyramids
+        baseHeight = null, // For rectangular pyramids
+        height = 100,
+        segments = 4,      // 4 for square pyramid, high number for cone-like
+        name = "pyramid",
+        color = DEFAULT_COLOR,
+        capBottom = true,
+        isCone = false     // Flag to indicate if this should behave like a cone
+    }) {
+        super({ x, y, z, name, color });
+        
+        this.isCone = isCone;
+        this.height = height;
+        this.capBottom = capBottom;
+        
+        if (this.isCone) {
+            // Cone configuration
+            this.baseRadius = Math.max(1, baseRadius);
+            this.segments = Math.max(8, Math.min(segments, 64)); // More segments for smooth cone
+        } else {
+            // Pyramid configuration
+            this.segments = Math.max(3, Math.min(segments, 32)); // Fewer segments for polygonal pyramid
+            
+            if (baseWidth !== null) {
+                // Rectangular/square pyramid
+                this.baseWidth = baseWidth;
+                this.baseHeight = baseHeight || baseWidth; // Default to square if height not specified
+                this.useRectangularBase = true;
+            } else {
+                // Circular/polygonal pyramid
+                this.baseRadius = Math.max(1, baseRadius);
+                this.useRectangularBase = false;
+            }
+        }
+        
+        // For collision detection
+        this.w = this.useRectangularBase ? this.baseWidth / 2 : (this.baseRadius || baseRadius);
+        this.h = height / 2;
+        this.d = this.useRectangularBase ? this.baseHeight / 2 : (this.baseRadius || baseRadius);
+    }
+
+    setUp() {
+        this.clearGeometry();
+        this.generatePyramidGeometry();
+    }
+
+    /**
+     * Generate pyramid/cone geometry
+     */
+    generatePyramidGeometry() {
+        // Apex vertex at top (lower y value since -y is up)
+        const apexIndex = this.Vertices.length;
+        this.Vertices.push(new Vertex(this.x, this.y - this.height / 2, this.z));
+        
+        // Generate base vertices
+        const baseStartIndex = this.Vertices.length;
+        this.generateBaseVertices();
+
+        // Generate side triangles
+        this.generateSideTriangles(apexIndex, baseStartIndex);
+
+        // Generate bottom cap if enabled
+        if (this.capBottom) {
+            this.generateBottomCap(baseStartIndex);
         }
     }
 
     /**
-     * Create a single tile at grid coordinates
+     * Generate base vertices based on pyramid type
      */
-    createTile(tileX, tileZ) {
-        const worldX = tileX * this.tileSize;
-        const worldZ = tileZ * this.tileSize;
-        const subdivisions = Shape3D.clampSubdivisions(this.gridSize);
+    generateBaseVertices() {
+        const baseY = this.y + this.height / 2;
 
-        const tile = new Plane({
-            x: worldX,
-            y: this.floorY,
-            z: worldZ,
-            width: this.tileSize,
-            height: this.tileSize,
-            subdivisions: subdivisions,
-            orientation: Plane.ORIENTATIONS.HORIZONTAL
+        if (this.useRectangularBase) {
+            // Rectangular base vertices
+            const halfWidth = this.baseWidth / 2;
+            const halfHeight = this.baseHeight / 2;
+            
+            this.Vertices.push(new Vertex(this.x - halfWidth, baseY, this.z - halfHeight)); // Bottom-left
+            this.Vertices.push(new Vertex(this.x + halfWidth, baseY, this.z - halfHeight)); // Bottom-right
+            this.Vertices.push(new Vertex(this.x + halfWidth, baseY, this.z + halfHeight)); // Top-right
+            this.Vertices.push(new Vertex(this.x - halfWidth, baseY, this.z + halfHeight)); // Top-left
+        } else {
+            // Circular/polygonal base vertices
+            for (let j = 0; j <= this.segments; j++) {
+                const angle = (2 * Math.PI * j) / this.segments;
+                const x = this.x + this.baseRadius * Math.cos(angle);
+                const z = this.z + this.baseRadius * Math.sin(angle);
+                
+                this.Vertices.push(new Vertex(x, baseY, z));
+            }
+        }
+    }
+
+    /**
+     * Generate side triangles from apex to base
+     */
+    generateSideTriangles(apexIndex, baseStartIndex) {
+        if (this.useRectangularBase) {
+            // 4 triangular faces for rectangular pyramid
+            for (let i = 0; i < 4; i++) {
+                const current = baseStartIndex + i;
+                const next = baseStartIndex + ((i + 1) % 4);
+                
+                // Triangle from apex to base edge
+                this.Triangles.push([apexIndex, next, current]);
+            }
+        } else {
+            // Triangular faces for circular/polygonal pyramid
+            for (let j = 0; j < this.segments; j++) {
+                const current = baseStartIndex + j;
+                const next = baseStartIndex + j + 1;
+                
+                // Triangle from apex to base edge
+                this.Triangles.push([apexIndex, next, current]);
+            }
+        }
+    }
+
+    /**
+     * Generate bottom cap
+     */
+    generateBottomCap(baseStartIndex) {
+        const bottomCenterIndex = this.Vertices.length;
+        const baseY = this.y + this.height / 2;
+        this.Vertices.push(new Vertex(this.x, baseY, this.z));
+        
+        if (this.useRectangularBase) {
+            // Two triangles for rectangular base
+            this.Triangles.push([bottomCenterIndex, baseStartIndex, baseStartIndex + 1]);
+            this.Triangles.push([bottomCenterIndex, baseStartIndex + 1, baseStartIndex + 2]);
+            this.Triangles.push([bottomCenterIndex, baseStartIndex + 2, baseStartIndex + 3]);
+            this.Triangles.push([bottomCenterIndex, baseStartIndex + 3, baseStartIndex]);
+        } else {
+            // Triangular fan for circular/polygonal base
+            for (let j = 0; j < this.segments; j++) {
+                const current = baseStartIndex + j;
+                const next = baseStartIndex + j + 1;
+                
+                this.Triangles.push([bottomCenterIndex, current, next]);
+            }
+        }
+    }
+
+    /**
+     * Static factory methods for different pyramid types
+     */
+    static createSquarePyramid(options) {
+        return new Pyramid({
+            ...options,
+            segments: 4,
+            baseWidth: options.baseSize || options.baseRadius * 2,
+            baseHeight: options.baseSize || options.baseRadius * 2,
+            isCone: false
         });
-
-        // Add subtle color variation
-        const variation = Math.sin(tileX * 0.1) * Math.cos(tileZ * 0.1) * 20;
-        tile.color = {
-            r: Math.max(0, Math.min(255, this.color.r + variation)),
-            g: Math.max(0, Math.min(255, this.color.g + variation)),
-            b: Math.max(0, Math.min(255, this.color.b + variation))
-        };
-
-        return tile;
     }
 
-    /**
-     * Get all currently active tiles
-     */
-    getTiles() {
-        return Array.from(this.tiles.values());
-    }
-}
-
-/**
- * Light source for 3D scene lighting
- */
-class Light {
-    static TYPES = {
-        POINT: 'point',
-        DIRECTIONAL: 'directional',
-        SPOT: 'spot'
-    };
-
-    constructor({
-        x = 0, y = 0, z = 0,
-        color = { r: 255, g: 255, b: 255 },
-        intensity = 1.0,
-        radius = 100,
-        type = Light.TYPES.POINT
-    }) {
-        this.x = x;
-        this.y = y;
-        this.z = z;
-        this.color = { ...color };
-        this.intensity = Math.max(0, intensity);
-        this.radius = Math.max(0, radius);
-        this.type = type;
-        this.enabled = true;
+    static createTriangularPyramid(options) {
+        return new Pyramid({
+            ...options,
+            segments: 3,
+            isCone: false
+        });
     }
 
-    /**
-     * Configure as directional light
-     */
-    setDirection(direction) {
-        this.direction = vectorNormalize(direction);
-        this.type = Light.TYPES.DIRECTIONAL;
-        return this;
+    static createCone(options) {
+        return new Pyramid({
+            ...options,
+            segments: options.segments || 16,
+            isCone: true
+        });
     }
 
-    /**
-     * Configure as spotlight
-     */
-    setSpotlight(direction, angle, falloff = 1.0) {
-        this.direction = vectorNormalize(direction);
-        this.spotAngle = Math.max(0, Math.min(Math.PI, angle));
-        this.spotFalloff = Math.max(0, falloff);
-        this.type = Light.TYPES.SPOT;
-        return this;
-    }
-
-    /**
-     * Toggle light on/off
-     */
-    toggle() {
-        this.enabled = !this.enabled;
-        return this;
+    static createHexagonalPyramid(options) {
+        return new Pyramid({
+            ...options,
+            segments: 6,
+            isCone: false
+        });
     }
 }
 
-/**
- * Camera for 3D scene viewing
- */
-class Camera {
-    constructor({ x, y, z, fov = 800 }) {
-        this.x = x;
-        this.y = y;
-        this.z = z;
-        this.fov = Math.max(100, fov); // Minimum FOV to prevent issues
-        this.rotationX = 0;
-        this.rotationY = 0;
-    }
-
-    /**
-     * Set camera position
-     */
-    setPosition(x, y, z) {
-        this.x = x;
-        this.y = y;
-        this.z = z;
-        return this;
-    }
-
-    /**
-     * Set camera rotation
-     */
-    setRotation(rotationX, rotationY) {
-        this.rotationX = rotationX;
-        this.rotationY = rotationY;
-        return this;
-    }
-
-    /**
-     * Get camera forward direction vector
-     */
-    getForwardVector() {
-        const cosY = Math.cos(this.rotationY);
-        const sinY = Math.sin(this.rotationY);
-        const cosX = Math.cos(this.rotationX);
-        const sinX = Math.sin(this.rotationX);
-
-        return {
-            x: sinY * cosX,
-            y: -sinX,
-            z: cosY * cosX
-        };
-    }
-}
